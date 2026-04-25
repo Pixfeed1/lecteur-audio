@@ -1,0 +1,629 @@
+<?php
+/**
+ * OnlyRoots Persistent Audio Player
+ *
+ * Persistent cross-page audio player for PrestaShop 8, with optional
+ * SPA-style navigation (Swup). Theme-agnostic: every theme-dependent value
+ * is exposed in the back-office configuration page.
+ *
+ * Requires the third-party "productaudioplaylistplugin" module which provides
+ * the audio data source (table `papp_audio_playlist`).
+ *
+ * @author    PixFeed - Marc Gueffie
+ * @copyright 2026 PixFeed
+ * @license   Proprietary
+ * @version   2.0.0
+ */
+
+if (!defined('_PS_VERSION_')) {
+    exit;
+}
+
+class OnlyRootsPlayer extends Module
+{
+    /* Source module that provides audio files (third-party dependency) */
+    const AUDIO_SOURCE_MODULE = 'productaudioplaylistplugin';
+    const AUDIO_TABLE         = 'papp_audio_playlist';
+    const BATCH_MAX_IDS       = 300;
+
+    /* Configuration keys */
+    const CFG_SWUP_ENABLED      = 'ORP_SWUP_ENABLED';
+    const CFG_SWUP_CONTAINER    = 'ORP_SWUP_CONTAINER';
+    const CFG_SWUP_PRELOAD      = 'ORP_SWUP_PRELOAD';
+    const CFG_SWUP_IP_WHITELIST = 'ORP_SWUP_IP_WHITELIST';
+    const CFG_DEBUG_ENABLED     = 'ORP_DEBUG_ENABLED';
+    const CFG_PRODUCT_SELECTORS = 'ORP_PRODUCT_SELECTORS';
+    const CFG_BUTTON_ANCHOR     = 'ORP_BUTTON_ANCHOR';
+    const CFG_EXTRA_EXCLUDES    = 'ORP_EXTRA_EXCLUDES';
+
+    /* Defaults — written on install, restorable from BO */
+    const DEFAULT_CONTAINER         = '#content-wrapper, #content, main, #main';
+    const DEFAULT_PRODUCT_SELECTORS = '.js-product-miniature[data-id-product], .product-miniature[data-id-product], article.product[data-id-product]';
+    const DEFAULT_BUTTON_ANCHOR     = '.buttons-sections, .product-list-actions, .product-add-to-cart, .product-buttons';
+
+    public function __construct()
+    {
+        $this->name             = 'onlyrootsplayer';
+        $this->tab              = 'front_office_features';
+        $this->version          = '2.0.0';
+        $this->author           = 'PixFeed';
+        $this->need_instance    = 0;
+        $this->bootstrap        = true;
+        $this->is_configurable  = 1;
+
+        parent::__construct();
+
+        $this->displayName      = $this->l('OnlyRoots — Lecteur audio persistant');
+        $this->description      = $this->l('Lecteur audio persistant cross-pages avec navigation SPA optionnelle. Compatible avec n\'importe quel thème PrestaShop 8 via sélecteurs configurables.');
+        $this->confirmUninstall = $this->l('Désinstaller OnlyRoots Player et supprimer toute sa configuration ?');
+
+        $this->ps_versions_compliancy = ['min' => '8.0.0', 'max' => '8.99.99'];
+    }
+
+    /* ============================================================ */
+    /*  INSTALL / UNINSTALL                                         */
+    /* ============================================================ */
+
+    public function install()
+    {
+        if (!self::audioSourceAvailable()) {
+            $this->_errors[] = sprintf(
+                $this->l('Ce module nécessite que le module « %s » soit installé et actif.'),
+                self::AUDIO_SOURCE_MODULE
+            );
+            return false;
+        }
+
+        $defaults = [
+            self::CFG_SWUP_ENABLED      => 1,
+            self::CFG_SWUP_CONTAINER    => self::DEFAULT_CONTAINER,
+            self::CFG_SWUP_PRELOAD      => 0,
+            self::CFG_SWUP_IP_WHITELIST => '',
+            self::CFG_DEBUG_ENABLED     => 0,
+            self::CFG_PRODUCT_SELECTORS => self::DEFAULT_PRODUCT_SELECTORS,
+            self::CFG_BUTTON_ANCHOR     => self::DEFAULT_BUTTON_ANCHOR,
+            self::CFG_EXTRA_EXCLUDES    => '',
+        ];
+        foreach ($defaults as $key => $val) {
+            Configuration::updateValue($key, $val);
+        }
+
+        return parent::install()
+            && $this->registerHook('displayFooter')
+            && $this->registerHook('displayHeader')
+            && $this->registerHook('actionFrontControllerSetMedia');
+    }
+
+    public function uninstall()
+    {
+        $keys = [
+            self::CFG_SWUP_ENABLED,
+            self::CFG_SWUP_CONTAINER,
+            self::CFG_SWUP_PRELOAD,
+            self::CFG_SWUP_IP_WHITELIST,
+            self::CFG_DEBUG_ENABLED,
+            self::CFG_PRODUCT_SELECTORS,
+            self::CFG_BUTTON_ANCHOR,
+            self::CFG_EXTRA_EXCLUDES,
+        ];
+        foreach ($keys as $k) {
+            Configuration::deleteByName($k);
+        }
+        return parent::uninstall();
+    }
+
+    /**
+     * Checks whether the audio source module table exists.
+     * SHOW TABLES is used directly because Db::getValue() appends LIMIT 1
+     * which is incompatible with SHOW TABLES on MariaDB.
+     */
+    public static function audioSourceAvailable()
+    {
+        $table = _DB_PREFIX_ . self::AUDIO_TABLE;
+        $result = Db::getInstance()->executeS(
+            'SHOW TABLES LIKE \'' . pSQL($table) . '\'',
+            true,
+            false
+        );
+        return !empty($result);
+    }
+
+    /* ============================================================ */
+    /*  BACK-OFFICE CONFIGURATION                                   */
+    /* ============================================================ */
+
+    public function getContent()
+    {
+        $output = '';
+
+        if (Tools::isSubmit('submitOrpConfig')) {
+            $output .= $this->postProcess();
+        }
+
+        if (!self::audioSourceAvailable()) {
+            $output .= $this->displayWarning(sprintf(
+                $this->l('Le module source audio « %s » n\'est pas installé ou sa table de base de données est manquante. Le lecteur ne s\'affichera nulle part tant que ce module ne sera pas actif.'),
+                self::AUDIO_SOURCE_MODULE
+            ));
+        }
+
+        return $output . $this->renderForm();
+    }
+
+    protected function postProcess()
+    {
+        $values = [
+            self::CFG_SWUP_ENABLED      => (int) Tools::getValue(self::CFG_SWUP_ENABLED),
+            self::CFG_SWUP_CONTAINER    => trim((string) Tools::getValue(self::CFG_SWUP_CONTAINER)),
+            self::CFG_SWUP_PRELOAD      => (int) Tools::getValue(self::CFG_SWUP_PRELOAD),
+            self::CFG_SWUP_IP_WHITELIST => trim((string) Tools::getValue(self::CFG_SWUP_IP_WHITELIST)),
+            self::CFG_DEBUG_ENABLED     => (int) Tools::getValue(self::CFG_DEBUG_ENABLED),
+            self::CFG_PRODUCT_SELECTORS => trim((string) Tools::getValue(self::CFG_PRODUCT_SELECTORS)),
+            self::CFG_BUTTON_ANCHOR     => trim((string) Tools::getValue(self::CFG_BUTTON_ANCHOR)),
+            self::CFG_EXTRA_EXCLUDES    => trim((string) Tools::getValue(self::CFG_EXTRA_EXCLUDES)),
+        ];
+
+        // Restore defaults on empty fields rather than letting the front break
+        if ($values[self::CFG_SWUP_CONTAINER] === '') {
+            $values[self::CFG_SWUP_CONTAINER] = self::DEFAULT_CONTAINER;
+        }
+        if ($values[self::CFG_PRODUCT_SELECTORS] === '') {
+            $values[self::CFG_PRODUCT_SELECTORS] = self::DEFAULT_PRODUCT_SELECTORS;
+        }
+        if ($values[self::CFG_BUTTON_ANCHOR] === '') {
+            $values[self::CFG_BUTTON_ANCHOR] = self::DEFAULT_BUTTON_ANCHOR;
+        }
+
+        foreach ($values as $key => $val) {
+            Configuration::updateValue($key, $val);
+        }
+
+        return $this->displayConfirmation($this->l('Paramètres enregistrés.'));
+    }
+
+    protected function renderForm()
+    {
+        $fields = [
+            'form' => [
+                'legend' => [
+                    'title' => $this->l('OnlyRoots Player — Configuration'),
+                    'icon'  => 'icon-cogs',
+                ],
+                'description' => $this->l(
+                    'Tous les sélecteurs dépendants du thème sont configurables ci-dessous. Utilisez d\'abord les valeurs par défaut ; ne les modifiez que si votre thème utilise un balisage DOM différent.'
+                ),
+                'input' => [
+                    [
+                        'type'    => 'switch',
+                        'label'   => $this->l('Activer la navigation SPA (Swup)'),
+                        'name'    => self::CFG_SWUP_ENABLED,
+                        'desc'    => $this->l('Quand activé, les transitions entre pages se font via fetch + remplacement DOM, en gardant l\'audio en lecture pendant les navigations. Si votre thème est incompatible, désactivez cette option — le lecteur continue de fonctionner en mode autonome via localStorage.'),
+                        'is_bool' => true,
+                        'values'  => [
+                            ['id' => 'swup_on',  'value' => 1, 'label' => $this->l('Activé')],
+                            ['id' => 'swup_off', 'value' => 0, 'label' => $this->l('Désactivé')],
+                        ],
+                    ],
+                    [
+                        'type'  => 'text',
+                        'label' => $this->l('Sélecteur(s) du conteneur Swup'),
+                        'name'  => self::CFG_SWUP_CONTAINER,
+                        'desc'  => sprintf(
+                            $this->l('Sélecteur(s) CSS de la zone de contenu principale à remplacer pendant la navigation. Plusieurs sélecteurs séparés par des virgules servent de fallback (le premier qui matche gagne). Défaut : %s'),
+                            self::DEFAULT_CONTAINER
+                        ),
+                        'class' => 'fixed-width-xxl',
+                    ],
+                    [
+                        'type'  => 'text',
+                        'label' => $this->l('Sélecteur(s) des fiches produit'),
+                        'name'  => self::CFG_PRODUCT_SELECTORS,
+                        'desc'  => sprintf(
+                            $this->l('Sélecteur(s) CSS utilisés pour trouver les fiches produit sur les listings, où sont injectés les boutons play. L\'élément doit porter un attribut [data-id-product]. Défaut : %s'),
+                            self::DEFAULT_PRODUCT_SELECTORS
+                        ),
+                        'class' => 'fixed-width-xxl',
+                    ],
+                    [
+                        'type'  => 'text',
+                        'label' => $this->l('Sélecteur(s) d\'ancrage du bouton play'),
+                        'name'  => self::CFG_BUTTON_ANCHOR,
+                        'desc'  => sprintf(
+                            $this->l('Dans chaque fiche produit, où placer le bouton play inline (à côté du bouton panier). Si aucun ancrage n\'est trouvé sur une fiche, le module retombe en fallback sur un bouton en overlay sur l\'image produit. Défaut : %s'),
+                            self::DEFAULT_BUTTON_ANCHOR
+                        ),
+                        'class' => 'fixed-width-xxl',
+                    ],
+                    [
+                        'type'    => 'switch',
+                        'label'   => $this->l('Précharger les liens au survol (Swup)'),
+                        'name'    => self::CFG_SWUP_PRELOAD,
+                        'desc'    => $this->l('Accélère la navigation perçue en préchargeant les pages quand l\'utilisateur survole un lien. Augmente légèrement la charge serveur.'),
+                        'is_bool' => true,
+                        'values'  => [
+                            ['id' => 'preload_on',  'value' => 1, 'label' => $this->l('Activé')],
+                            ['id' => 'preload_off', 'value' => 0, 'label' => $this->l('Désactivé')],
+                        ],
+                    ],
+                    [
+                        'type'  => 'textarea',
+                        'label' => $this->l('Whitelist d\'IPs (mode preview)'),
+                        'name'  => self::CFG_SWUP_IP_WHITELIST,
+                        'desc'  => $this->l('Si rempli, Swup n\'est activé que pour ces IPs (CIDR v4 supporté, séparées par virgules ou retours à la ligne). Utile pour tester la navigation SPA en production pour le staff uniquement. Laissez vide pour activer Swup pour tout le monde.'),
+                        'cols'  => 60,
+                        'rows'  => 3,
+                    ],
+                    [
+                        'type'  => 'textarea',
+                        'label' => $this->l('Motifs d\'exclusion d\'URL supplémentaires'),
+                        'name'  => self::CFG_EXTRA_EXCLUDES,
+                        'desc'  => $this->l('Un motif par ligne. Les URLs contenant l\'un de ces motifs court-circuitent Swup et déclenchent un rechargement complet de la page. Les pages PrestaShop standard (panier, commande, connexion, mon compte, etc.) sont déjà exclues automatiquement — listez ici uniquement les chemins additionnels.'),
+                        'cols'  => 60,
+                        'rows'  => 4,
+                    ],
+                    [
+                        'type'    => 'switch',
+                        'label'   => $this->l('Mode debug'),
+                        'name'    => self::CFG_DEBUG_ENABLED,
+                        'desc'    => $this->l('Logge les événements détaillés dans la console du navigateur (aucun log côté serveur). À désactiver en production.'),
+                        'is_bool' => true,
+                        'values'  => [
+                            ['id' => 'debug_on',  'value' => 1, 'label' => $this->l('Activé')],
+                            ['id' => 'debug_off', 'value' => 0, 'label' => $this->l('Désactivé')],
+                        ],
+                    ],
+                ],
+                'submit' => [
+                    'title' => $this->l('Enregistrer'),
+                    'name'  => 'submitOrpConfig',
+                    'class' => 'btn btn-default pull-right',
+                ],
+            ],
+        ];
+
+        $helper = new HelperForm();
+        $helper->show_toolbar       = false;
+        $helper->table              = $this->table;
+        $helper->module             = $this;
+        $helper->default_form_language    = (int) $this->context->language->id;
+        $helper->allow_employee_form_lang = (int) Configuration::get('PS_BO_ALLOW_EMPLOYEE_FORM_LANG');
+        $helper->identifier         = $this->identifier;
+        $helper->submit_action      = 'submitOrpConfig';
+        $helper->currentIndex       = $this->context->link->getAdminLink('AdminModules', false)
+            . '&configure=' . $this->name . '&tab_module=' . $this->tab . '&module_name=' . $this->name;
+        $helper->token              = Tools::getAdminTokenLite('AdminModules');
+        $helper->tpl_vars           = [
+            'fields_value' => $this->getConfigFormValues(),
+            'languages'    => $this->context->controller->getLanguages(),
+            'id_language'  => $this->context->language->id,
+        ];
+
+        return $helper->generateForm([$fields]);
+    }
+
+    protected function getConfigFormValues()
+    {
+        return [
+            self::CFG_SWUP_ENABLED      => Configuration::get(self::CFG_SWUP_ENABLED),
+            self::CFG_SWUP_CONTAINER    => Configuration::get(self::CFG_SWUP_CONTAINER),
+            self::CFG_SWUP_PRELOAD      => Configuration::get(self::CFG_SWUP_PRELOAD),
+            self::CFG_SWUP_IP_WHITELIST => Configuration::get(self::CFG_SWUP_IP_WHITELIST),
+            self::CFG_DEBUG_ENABLED     => Configuration::get(self::CFG_DEBUG_ENABLED),
+            self::CFG_PRODUCT_SELECTORS => Configuration::get(self::CFG_PRODUCT_SELECTORS),
+            self::CFG_BUTTON_ANCHOR     => Configuration::get(self::CFG_BUTTON_ANCHOR),
+            self::CFG_EXTRA_EXCLUDES    => Configuration::get(self::CFG_EXTRA_EXCLUDES),
+        ];
+    }
+
+    /* ============================================================ */
+    /*  HOOKS                                                       */
+    /* ============================================================ */
+
+    public function hookActionFrontControllerSetMedia($params)
+    {
+        $modulePath = _PS_MODULE_DIR_ . $this->name . '/';
+
+        // CSS — versioned via filemtime to bypass browser cache after edits
+        $cssFile = 'modules/' . $this->name . '/views/css/player.css';
+        $cssVer  = $this->fileVersion($modulePath . 'views/css/player.css');
+        $this->context->controller->registerStylesheet(
+            'onlyrootsplayer-css',
+            $cssFile,
+            ['media' => 'all', 'priority' => 200, 'version' => $cssVer]
+        );
+
+        // Swup libs (only if Swup is enabled for this request)
+        if ($this->isSwupEnabledForCurrentRequest()) {
+            $base = 'modules/' . $this->name . '/views/js/lib/';
+            $libs = [
+                'onlyroots-swup'           => 'swup.min.js',
+                'onlyroots-swup-head'      => 'swup-head-plugin.min.js',
+                'onlyroots-swup-scripts'   => 'swup-scripts-plugin.min.js',
+                'onlyroots-swup-bodyclass' => 'swup-body-class-plugin.min.js',
+                'onlyroots-swup-preload'   => 'swup-preload-plugin.min.js',
+            ];
+            $priority = 180;
+            foreach ($libs as $id => $file) {
+                $libVer = $this->fileVersion($modulePath . 'views/js/lib/' . $file);
+                $this->context->controller->registerJavascript(
+                    $id,
+                    $base . $file,
+                    ['position' => 'bottom', 'priority' => $priority++, 'version' => $libVer]
+                );
+            }
+        }
+
+        // Player JS
+        $jsVer = $this->fileVersion($modulePath . 'views/js/player.js');
+        $this->context->controller->registerJavascript(
+            'onlyrootsplayer-js',
+            'modules/' . $this->name . '/views/js/player.js',
+            ['position' => 'bottom', 'priority' => 200, 'version' => $jsVer]
+        );
+    }
+
+    public function hookDisplayHeader($params)
+    {
+        $swupEnabled   = $this->isSwupEnabledForCurrentRequest();
+        $swupContainer = Configuration::get(self::CFG_SWUP_CONTAINER) ?: self::DEFAULT_CONTAINER;
+        $swupPreload   = (int) Configuration::get(self::CFG_SWUP_PRELOAD) === 1;
+        $debug         = (int) Configuration::get(self::CFG_DEBUG_ENABLED) === 1;
+        $productSel    = Configuration::get(self::CFG_PRODUCT_SELECTORS) ?: self::DEFAULT_PRODUCT_SELECTORS;
+        $buttonAnchor  = Configuration::get(self::CFG_BUTTON_ANCHOR) ?: self::DEFAULT_BUTTON_ANCHOR;
+
+        Media::addJsDef([
+            'onlyrootsPlayerConfig' => [
+                'uploadBaseUrl'    => $this->getUploadBaseUrl(),
+                'apiUrl'           => $this->context->link->getModuleLink($this->name, 'playlist'),
+                'storageKey'       => 'orp_state_v1',
+                'available'        => self::audioSourceAvailable(),
+                'swupEnabled'      => $swupEnabled,
+                'swupContainer'    => $swupContainer,
+                'swupPreload'      => $swupPreload,
+                'swupExcludePaths' => $this->getSwupExcludePaths(),
+                'productSelectors' => $productSel,
+                'buttonAnchor'     => $buttonAnchor,
+                'debug'            => $debug,
+            ],
+            'onlyrootsPlayerL10n' => [
+                'listenSample'  => $this->l('Écouter un extrait'),
+                'listen'        => $this->l('Écouter'),
+                'pause'         => $this->l('Pause'),
+                'openInPlayer'  => $this->l('Ouvrir dans le lecteur'),
+                'openPlaylist'  => $this->l('Ouvrir cette playlist dans le lecteur persistant'),
+            ],
+        ]);
+    }
+
+    public function hookDisplayFooter($params)
+    {
+        if (!self::audioSourceAvailable()) {
+            return '';
+        }
+        return $this->fetch('module:' . $this->name . '/views/templates/hook/player-footer.tpl');
+    }
+
+    /* ============================================================ */
+    /*  HELPERS                                                     */
+    /* ============================================================ */
+
+    public function getUploadBaseUrl()
+    {
+        return $this->context->link->getBaseLink() . 'modules/' . self::AUDIO_SOURCE_MODULE . '/upload/';
+    }
+
+    /**
+     * Returns the list of URL substrings that bypass Swup and trigger a full
+     * reload. Built dynamically from PrestaShop's localised page links so the
+     * module works on shops in any language without hardcoded French URLs.
+     *
+     * @return array<string>
+     */
+    private function getSwupExcludePaths()
+    {
+        $excludes = [];
+
+        // Built-in PrestaShop pages we never want SPA-loaded (forms, payment,
+        // session-sensitive flows). Pulled from Link::getPageLink() so they
+        // match whatever URL rewrite + language the shop uses.
+        $pageNames = [
+            'cart', 'order', 'order-confirmation', 'authentication',
+            'identity', 'address', 'addresses', 'history', 'order-follow',
+            'order-slip', 'guest-tracking', 'password', 'my-account',
+            'discount', 'order-detail', 'module-payment',
+        ];
+        foreach ($pageNames as $page) {
+            try {
+                $url = (string) $this->context->link->getPageLink($page, true);
+                if ($url === '') continue;
+                $path = (string) parse_url($url, PHP_URL_PATH);
+                if ($path !== '' && $path !== '/') {
+                    $excludes[] = $path;
+                }
+            } catch (Exception $e) {
+                // some virtual pages may throw on certain shop configurations — skip
+            }
+        }
+
+        // Controller-based exclusions (work regardless of friendly URL settings)
+        $excludes[] = 'controller=order';
+        $excludes[] = 'controller=cart';
+        $excludes[] = 'controller=authentication';
+        $excludes[] = 'controller=password';
+        $excludes[] = 'controller=my-account';
+        $excludes[] = 'controller=identity';
+        $excludes[] = 'controller=address';
+        $excludes[] = 'controller=history';
+        $excludes[] = 'ajax=1';
+        $excludes[] = 'ajax=true';
+        $excludes[] = 'mylogout=';
+        $excludes[] = '/admin';
+
+        // Operator-defined extras from BO config
+        $extra = (string) Configuration::get(self::CFG_EXTRA_EXCLUDES);
+        if ($extra !== '') {
+            $lines = preg_split('/[\r\n]+/', $extra, -1, PREG_SPLIT_NO_EMPTY);
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line !== '') {
+                    $excludes[] = $line;
+                }
+            }
+        }
+
+        return array_values(array_unique($excludes));
+    }
+
+    /**
+     * Whether Swup should be active for the current request, applying both
+     * the global toggle and the optional IP whitelist (preview mode).
+     */
+    private function isSwupEnabledForCurrentRequest()
+    {
+        if ((int) Configuration::get(self::CFG_SWUP_ENABLED) !== 1) {
+            return false;
+        }
+
+        $whitelist = trim((string) Configuration::get(self::CFG_SWUP_IP_WHITELIST));
+        if ($whitelist === '') {
+            return true;
+        }
+
+        $clientIp = $this->getClientIp();
+        if ($clientIp === '') {
+            return false;
+        }
+
+        $allowed = preg_split('/[\s,]+/', $whitelist, -1, PREG_SPLIT_NO_EMPTY);
+        foreach ($allowed as $ip) {
+            if ($this->ipMatches($clientIp, $ip)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function getClientIp()
+    {
+        if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
+            return trim($_SERVER['HTTP_CF_CONNECTING_IP']);
+        }
+        if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $parts = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
+            return trim($parts[0]);
+        }
+        if (!empty($_SERVER['HTTP_X_REAL_IP'])) {
+            return trim($_SERVER['HTTP_X_REAL_IP']);
+        }
+        return isset($_SERVER['REMOTE_ADDR']) ? (string) $_SERVER['REMOTE_ADDR'] : '';
+    }
+
+    private function ipMatches($ip, $pattern)
+    {
+        if ($ip === $pattern) {
+            return true;
+        }
+        if (strpos($pattern, '/') !== false) {
+            list($subnet, $bits) = explode('/', $pattern, 2);
+            $bits = (int) $bits;
+            if ($bits < 0 || $bits > 32) return false;
+
+            $ipLong     = ip2long($ip);
+            $subnetLong = ip2long($subnet);
+            if ($ipLong === false || $subnetLong === false) return false;
+
+            $mask = -1 << (32 - $bits);
+            return ($ipLong & $mask) === ($subnetLong & $mask);
+        }
+        return false;
+    }
+
+    /**
+     * Returns a cache-busting version string for an asset, based on its
+     * mtime. Falls back to the module version if the file is missing.
+     */
+    private function fileVersion($absolutePath)
+    {
+        return file_exists($absolutePath)
+            ? (string) filemtime($absolutePath)
+            : (string) $this->version;
+    }
+
+    /* ============================================================ */
+    /*  DATA API                                                    */
+    /* ============================================================ */
+
+    public static function getProductTracks($idProduct)
+    {
+        $idProduct = (int) $idProduct;
+        if ($idProduct <= 0 || !self::audioSourceAvailable()) {
+            return [];
+        }
+
+        $query = new DbQuery();
+        $query->select('`papp_audio_filename`, `papp_audio_display_filename`');
+        $query->from(self::AUDIO_TABLE);
+        $query->where('`product_id` = ' . $idProduct);
+        $query->orderBy('`id_papp` ASC');
+
+        $rows = Db::getInstance()->executeS($query);
+        if (!$rows) {
+            return [];
+        }
+
+        $baseUrl = Context::getContext()->link->getBaseLink()
+            . 'modules/' . self::AUDIO_SOURCE_MODULE . '/upload/';
+
+        $tracks = [];
+        foreach ($rows as $row) {
+            $filename = (string) $row['papp_audio_filename'];
+            $tracks[] = [
+                'filename' => $filename,
+                'title'    => (string) $row['papp_audio_display_filename'],
+                'url'      => $baseUrl . $idProduct . '/' . rawurlencode($filename),
+            ];
+        }
+
+        return $tracks;
+    }
+
+    public static function getProductsWithAudio(array $productIds)
+    {
+        if (empty($productIds) || !self::audioSourceAvailable()) {
+            return [];
+        }
+
+        $ids = array_values(array_unique(array_map('intval', $productIds)));
+        $ids = array_filter($ids, function ($v) { return $v > 0; });
+        if (count($ids) > self::BATCH_MAX_IDS) {
+            $ids = array_slice($ids, 0, self::BATCH_MAX_IDS);
+        }
+        if (empty($ids)) {
+            return [];
+        }
+
+        sort($ids);
+        $cacheKey = 'orp_with_audio_' . md5(implode(',', $ids));
+
+        if (Cache::isStored($cacheKey)) {
+            return (array) Cache::retrieve($cacheKey);
+        }
+
+        $query = new DbQuery();
+        $query->select('DISTINCT `product_id`');
+        $query->from(self::AUDIO_TABLE);
+        $query->where('`product_id` IN (' . implode(',', $ids) . ')');
+
+        $rows = Db::getInstance()->executeS($query);
+
+        $result = [];
+        if ($rows) {
+            foreach ($rows as $row) {
+                $result[] = (int) $row['product_id'];
+            }
+        }
+
+        Cache::store($cacheKey, $result);
+        return $result;
+    }
+}
