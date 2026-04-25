@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" version="1.2">
+  <file source-language="en-US" target-language="fr-FR" datatype="plaintext" original="ModulesOnlyrootsplayerShop.en-US.xlf">
+    <header>
+      <tool tool-id="onlyrootsplayer" tool-name="OnlyRoots Persistent Audio Player"/>
+    </header>
+    <body>
+      <trans-unit id="1" resname="Listen to a sample">
+        <source>Listen to a sample</source>
+        <target>Écouter un extrait</target>
+      </trans-unit>
+      <trans-unit id="2" resname="Listen">
+        <source>Listen</source>
+        <target>Écouter</target>
+      </trans-unit>
+      <trans-unit id="3" resname="Pause">
+        <source>Pause</source>
+        <target>Pause</target>
+      </trans-unit>
+      <trans-unit id="4" resname="Open in player">
+        <source>Open in player</source>
+        <target>Ouvrir dans le lecteur</target>
+      </trans-unit>
+      <trans-unit id="5" resname="Open this playlist in the persistent player">
+        <source>Open this playlist in the persistent player</source>
+        <target>Ouvrir cette playlist dans le lecteur persistant</target>
+      </trans-unit>
+      <trans-unit id="6" resname="Audio player">
+        <source>Audio player</source>
+        <target>Lecteur audio</target>
+      </trans-unit>
+      <trans-unit id="7" resname="Previous track">
+        <source>Previous track</source>
+        <target>Piste précédente</target>
+      </trans-unit>
+      <trans-unit id="8" resname="Next track">
+        <source>Next track</source>
+        <target>Piste suivante</target>
+      </trans-unit>
+      <trans-unit id="9" resname="Play / Pause">
+        <source>Play / Pause</source>
+        <target>Lecture / Pause</target>
+      </trans-unit>
+      <trans-unit id="10" resname="Play or pause">
+        <source>Play or pause</source>
+        <target>Lecture ou pause</target>
+      </trans-unit>
+      <trans-unit id="11" resname="Progress">
+        <source>Progress</source>
+        <target>Progression</target>
+      </trans-unit>
+      <trans-unit id="12" resname="Volume">
+        <source>Volume</source>
+        <target>Volume</target>
+      </trans-unit>
+      <trans-unit id="13" resname="Mute or unmute">
+        <source>Mute or unmute</source>
+        <target>Couper ou rétablir le son</target>
+      </trans-unit>
+      <trans-unit id="14" resname="Close">
+        <source>Close</source>
+        <target>Fermer</target>
+      </trans-unit>
+      <trans-unit id="15" resname="Close the player">
+        <source>Close the player</source>
+        <target>Fermer le lecteur</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>

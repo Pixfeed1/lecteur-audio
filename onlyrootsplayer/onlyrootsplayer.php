@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.0.0
+ * @version   2.1.0
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -35,17 +35,21 @@ class OnlyRootsPlayer extends Module
     const CFG_PRODUCT_SELECTORS = 'ORP_PRODUCT_SELECTORS';
     const CFG_BUTTON_ANCHOR     = 'ORP_BUTTON_ANCHOR';
     const CFG_EXTRA_EXCLUDES    = 'ORP_EXTRA_EXCLUDES';
+    const CFG_WATCHDOG_MS       = 'ORP_WATCHDOG_MS';
 
     /* Defaults — written on install, restorable from BO */
     const DEFAULT_CONTAINER         = '#content-wrapper, #content, main, #main';
     const DEFAULT_PRODUCT_SELECTORS = '.js-product-miniature[data-id-product], .product-miniature[data-id-product], article.product[data-id-product]';
     const DEFAULT_BUTTON_ANCHOR     = '.buttons-sections, .product-list-actions, .product-add-to-cart, .product-buttons';
+    const DEFAULT_WATCHDOG_MS       = 1500;
+    const WATCHDOG_MIN_MS           = 500;
+    const WATCHDOG_MAX_MS           = 5000;
 
     public function __construct()
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.0.0';
+        $this->version          = '2.1.0';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -53,9 +57,21 @@ class OnlyRootsPlayer extends Module
 
         parent::__construct();
 
-        $this->displayName      = $this->l('OnlyRoots — Lecteur audio persistant');
-        $this->description      = $this->l('Lecteur audio persistant cross-pages avec navigation SPA optionnelle. Compatible avec n\'importe quel thème PrestaShop 8 via sélecteurs configurables.');
-        $this->confirmUninstall = $this->l('Désinstaller OnlyRoots Player et supprimer toute sa configuration ?');
+        $this->displayName      = $this->trans(
+            'OnlyRoots — Persistent audio player',
+            [],
+            'Modules.Onlyrootsplayer.Admin'
+        );
+        $this->description      = $this->trans(
+            'Persistent cross-page audio player with optional SPA navigation. Theme-agnostic for PrestaShop 8 via configurable selectors.',
+            [],
+            'Modules.Onlyrootsplayer.Admin'
+        );
+        $this->confirmUninstall = $this->trans(
+            'Uninstall OnlyRoots Player and remove all of its configuration?',
+            [],
+            'Modules.Onlyrootsplayer.Admin'
+        );
 
         $this->ps_versions_compliancy = ['min' => '8.0.0', 'max' => '8.99.99'];
     }
@@ -68,7 +84,11 @@ class OnlyRootsPlayer extends Module
     {
         if (!self::audioSourceAvailable()) {
             $this->_errors[] = sprintf(
-                $this->l('Ce module nécessite que le module « %s » soit installé et actif.'),
+                $this->trans(
+                    'This module requires the "%s" module to be installed and active.',
+                    [self::AUDIO_SOURCE_MODULE],
+                    'Modules.Onlyrootsplayer.Admin'
+                ),
                 self::AUDIO_SOURCE_MODULE
             );
             return false;
@@ -83,15 +103,24 @@ class OnlyRootsPlayer extends Module
             self::CFG_PRODUCT_SELECTORS => self::DEFAULT_PRODUCT_SELECTORS,
             self::CFG_BUTTON_ANCHOR     => self::DEFAULT_BUTTON_ANCHOR,
             self::CFG_EXTRA_EXCLUDES    => '',
+            self::CFG_WATCHDOG_MS       => self::DEFAULT_WATCHDOG_MS,
         ];
+        // updateValue is an upsert — existing 2.0.0 installs keep their values,
+        // only the new keys (e.g. WATCHDOG_MS) get the default written.
         foreach ($defaults as $key => $val) {
-            Configuration::updateValue($key, $val);
+            if (Configuration::get($key) === false) {
+                Configuration::updateValue($key, $val);
+            }
         }
 
         return parent::install()
             && $this->registerHook('displayFooter')
             && $this->registerHook('displayHeader')
-            && $this->registerHook('actionFrontControllerSetMedia');
+            && $this->registerHook('actionFrontControllerSetMedia')
+            && $this->registerHook('actionObjectPappAudioPlaylistAddAfter')
+            && $this->registerHook('actionObjectPappAudioPlaylistUpdateAfter')
+            && $this->registerHook('actionObjectPappAudioPlaylistDeleteAfter')
+            && $this->registerHook('actionAdminControllerInitAfter');
     }
 
     public function uninstall()
@@ -105,6 +134,7 @@ class OnlyRootsPlayer extends Module
             self::CFG_PRODUCT_SELECTORS,
             self::CFG_BUTTON_ANCHOR,
             self::CFG_EXTRA_EXCLUDES,
+            self::CFG_WATCHDOG_MS,
         ];
         foreach ($keys as $k) {
             Configuration::deleteByName($k);
@@ -113,19 +143,24 @@ class OnlyRootsPlayer extends Module
     }
 
     /**
-     * Checks whether the audio source module table exists.
-     * SHOW TABLES is used directly because Db::getValue() appends LIMIT 1
-     * which is incompatible with SHOW TABLES on MariaDB.
+     * Checks whether the audio source module table exists. Result is cached
+     * statically for the lifetime of the request — the underlying SHOW TABLES
+     * was being issued on every front controller for nothing.
      */
     public static function audioSourceAvailable()
     {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
         $table = _DB_PREFIX_ . self::AUDIO_TABLE;
         $result = Db::getInstance()->executeS(
             'SHOW TABLES LIKE \'' . pSQL($table) . '\'',
             true,
             false
         );
-        return !empty($result);
+        $cached = !empty($result);
+        return $cached;
     }
 
     /* ============================================================ */
@@ -141,10 +176,13 @@ class OnlyRootsPlayer extends Module
         }
 
         if (!self::audioSourceAvailable()) {
-            $output .= $this->displayWarning(sprintf(
-                $this->l('Le module source audio « %s » n\'est pas installé ou sa table de base de données est manquante. Le lecteur ne s\'affichera nulle part tant que ce module ne sera pas actif.'),
-                self::AUDIO_SOURCE_MODULE
-            ));
+            $output .= $this->displayWarning(
+                $this->trans(
+                    'The audio source module "%s" is not installed or its database table is missing. The player will not display anywhere until that module is active.',
+                    [self::AUDIO_SOURCE_MODULE],
+                    'Modules.Onlyrootsplayer.Admin'
+                )
+            );
         }
 
         return $output . $this->renderForm();
@@ -152,6 +190,11 @@ class OnlyRootsPlayer extends Module
 
     protected function postProcess()
     {
+        $watchdog = (int) Tools::getValue(self::CFG_WATCHDOG_MS);
+        if ($watchdog < self::WATCHDOG_MIN_MS || $watchdog > self::WATCHDOG_MAX_MS) {
+            $watchdog = self::DEFAULT_WATCHDOG_MS;
+        }
+
         $values = [
             self::CFG_SWUP_ENABLED      => (int) Tools::getValue(self::CFG_SWUP_ENABLED),
             self::CFG_SWUP_CONTAINER    => trim((string) Tools::getValue(self::CFG_SWUP_CONTAINER)),
@@ -161,6 +204,7 @@ class OnlyRootsPlayer extends Module
             self::CFG_PRODUCT_SELECTORS => trim((string) Tools::getValue(self::CFG_PRODUCT_SELECTORS)),
             self::CFG_BUTTON_ANCHOR     => trim((string) Tools::getValue(self::CFG_BUTTON_ANCHOR)),
             self::CFG_EXTRA_EXCLUDES    => trim((string) Tools::getValue(self::CFG_EXTRA_EXCLUDES)),
+            self::CFG_WATCHDOG_MS       => $watchdog,
         ];
 
         // Restore defaults on empty fields rather than letting the front break
@@ -178,7 +222,17 @@ class OnlyRootsPlayer extends Module
             Configuration::updateValue($key, $val);
         }
 
-        return $this->displayConfirmation($this->l('Paramètres enregistrés.'));
+        return $this->displayConfirmation(
+            $this->trans('Settings saved.', [], 'Modules.Onlyrootsplayer.Admin')
+        );
+    }
+
+    /**
+     * Shorthand for the admin translation domain — keeps renderForm() readable.
+     */
+    private function tAdmin($key, array $params = [])
+    {
+        return $this->trans($key, $params, 'Modules.Onlyrootsplayer.Admin');
     }
 
     protected function renderForm()
@@ -186,95 +240,105 @@ class OnlyRootsPlayer extends Module
         $fields = [
             'form' => [
                 'legend' => [
-                    'title' => $this->l('OnlyRoots Player — Configuration'),
+                    'title' => $this->tAdmin('OnlyRoots Player — Configuration'),
                     'icon'  => 'icon-cogs',
                 ],
-                'description' => $this->l(
-                    'Tous les sélecteurs dépendants du thème sont configurables ci-dessous. Utilisez d\'abord les valeurs par défaut ; ne les modifiez que si votre thème utilise un balisage DOM différent.'
+                'description' => $this->tAdmin(
+                    'All theme-dependent selectors are configurable below. Start with the defaults; only change them if your theme uses different DOM markup.'
                 ),
                 'input' => [
                     [
                         'type'    => 'switch',
-                        'label'   => $this->l('Activer la navigation SPA (Swup)'),
+                        'label'   => $this->tAdmin('Enable SPA navigation (Swup)'),
                         'name'    => self::CFG_SWUP_ENABLED,
-                        'desc'    => $this->l('Quand activé, les transitions entre pages se font via fetch + remplacement DOM, en gardant l\'audio en lecture pendant les navigations. Si votre thème est incompatible, désactivez cette option — le lecteur continue de fonctionner en mode autonome via localStorage.'),
+                        'desc'    => $this->tAdmin('When enabled, page transitions happen via fetch + DOM replacement, keeping audio playing across navigations. If your theme is incompatible, disable this option — the player still works in standalone mode via localStorage.'),
                         'is_bool' => true,
                         'values'  => [
-                            ['id' => 'swup_on',  'value' => 1, 'label' => $this->l('Activé')],
-                            ['id' => 'swup_off', 'value' => 0, 'label' => $this->l('Désactivé')],
+                            ['id' => 'swup_on',  'value' => 1, 'label' => $this->tAdmin('Enabled')],
+                            ['id' => 'swup_off', 'value' => 0, 'label' => $this->tAdmin('Disabled')],
                         ],
                     ],
                     [
                         'type'  => 'text',
-                        'label' => $this->l('Sélecteur(s) du conteneur Swup'),
+                        'label' => $this->tAdmin('Swup container selector(s)'),
                         'name'  => self::CFG_SWUP_CONTAINER,
-                        'desc'  => sprintf(
-                            $this->l('Sélecteur(s) CSS de la zone de contenu principale à remplacer pendant la navigation. Plusieurs sélecteurs séparés par des virgules servent de fallback (le premier qui matche gagne). Défaut : %s'),
-                            self::DEFAULT_CONTAINER
+                        'desc'  => $this->tAdmin(
+                            'CSS selector(s) for the main content area to swap during navigation. Multiple comma-separated selectors act as fallbacks (first one that matches and contains a product card wins). Default: %selectors%',
+                            ['%selectors%' => self::DEFAULT_CONTAINER]
                         ),
                         'class' => 'fixed-width-xxl',
                     ],
                     [
                         'type'  => 'text',
-                        'label' => $this->l('Sélecteur(s) des fiches produit'),
+                        'label' => $this->tAdmin('Product card selector(s)'),
                         'name'  => self::CFG_PRODUCT_SELECTORS,
-                        'desc'  => sprintf(
-                            $this->l('Sélecteur(s) CSS utilisés pour trouver les fiches produit sur les listings, où sont injectés les boutons play. L\'élément doit porter un attribut [data-id-product]. Défaut : %s'),
-                            self::DEFAULT_PRODUCT_SELECTORS
+                        'desc'  => $this->tAdmin(
+                            'CSS selector(s) used to find product cards on listings, where the play buttons are injected. The element must carry a [data-id-product] attribute. Default: %selectors%',
+                            ['%selectors%' => self::DEFAULT_PRODUCT_SELECTORS]
                         ),
                         'class' => 'fixed-width-xxl',
                     ],
                     [
                         'type'  => 'text',
-                        'label' => $this->l('Sélecteur(s) d\'ancrage du bouton play'),
+                        'label' => $this->tAdmin('Play button anchor selector(s)'),
                         'name'  => self::CFG_BUTTON_ANCHOR,
-                        'desc'  => sprintf(
-                            $this->l('Dans chaque fiche produit, où placer le bouton play inline (à côté du bouton panier). Si aucun ancrage n\'est trouvé sur une fiche, le module retombe en fallback sur un bouton en overlay sur l\'image produit. Défaut : %s'),
-                            self::DEFAULT_BUTTON_ANCHOR
+                        'desc'  => $this->tAdmin(
+                            'Inside each product card, where to insert the inline play button (next to the cart button). Multiple comma-separated selectors are tried in order; the first match wins per card. If no anchor matches, the module falls back to an overlay button on the product image. Default: %selectors%',
+                            ['%selectors%' => self::DEFAULT_BUTTON_ANCHOR]
                         ),
                         'class' => 'fixed-width-xxl',
                     ],
                     [
                         'type'    => 'switch',
-                        'label'   => $this->l('Précharger les liens au survol (Swup)'),
+                        'label'   => $this->tAdmin('Preload links on hover (Swup)'),
                         'name'    => self::CFG_SWUP_PRELOAD,
-                        'desc'    => $this->l('Accélère la navigation perçue en préchargeant les pages quand l\'utilisateur survole un lien. Augmente légèrement la charge serveur.'),
+                        'desc'    => $this->tAdmin('Speeds up perceived navigation by preloading pages when the user hovers a link. Slightly increases server load.'),
                         'is_bool' => true,
                         'values'  => [
-                            ['id' => 'preload_on',  'value' => 1, 'label' => $this->l('Activé')],
-                            ['id' => 'preload_off', 'value' => 0, 'label' => $this->l('Désactivé')],
+                            ['id' => 'preload_on',  'value' => 1, 'label' => $this->tAdmin('Enabled')],
+                            ['id' => 'preload_off', 'value' => 0, 'label' => $this->tAdmin('Disabled')],
                         ],
                     ],
                     [
+                        'type'  => 'text',
+                        'label' => $this->tAdmin('Swap watchdog timeout (ms)'),
+                        'name'  => self::CFG_WATCHDOG_MS,
+                        'desc'  => $this->tAdmin(
+                            'After this timeout (in milliseconds), if a Swup swap has updated the URL but not the content, the module forces a full reload. The runtime adapts this value upwards (capped at %max% ms) for slow shops based on the first successful swap. Default: %default% ms.',
+                            ['%default%' => (string) self::DEFAULT_WATCHDOG_MS, '%max%' => (string) self::WATCHDOG_MAX_MS]
+                        ),
+                        'class' => 'fixed-width-md',
+                    ],
+                    [
                         'type'  => 'textarea',
-                        'label' => $this->l('Whitelist d\'IPs (mode preview)'),
+                        'label' => $this->tAdmin('IP whitelist (preview mode)'),
                         'name'  => self::CFG_SWUP_IP_WHITELIST,
-                        'desc'  => $this->l('Si rempli, Swup n\'est activé que pour ces IPs (CIDR v4 supporté, séparées par virgules ou retours à la ligne). Utile pour tester la navigation SPA en production pour le staff uniquement. Laissez vide pour activer Swup pour tout le monde.'),
+                        'desc'  => $this->tAdmin('If filled, Swup is enabled only for these IPs (IPv4 CIDR supported, comma- or newline-separated). Useful to test SPA navigation in production for staff only. Leave empty to enable Swup for everyone.'),
                         'cols'  => 60,
                         'rows'  => 3,
                     ],
                     [
                         'type'  => 'textarea',
-                        'label' => $this->l('Motifs d\'exclusion d\'URL supplémentaires'),
+                        'label' => $this->tAdmin('Additional URL exclusion patterns'),
                         'name'  => self::CFG_EXTRA_EXCLUDES,
-                        'desc'  => $this->l('Un motif par ligne. Les URLs contenant l\'un de ces motifs court-circuitent Swup et déclenchent un rechargement complet de la page. Les pages PrestaShop standard (panier, commande, connexion, mon compte, etc.) sont déjà exclues automatiquement — listez ici uniquement les chemins additionnels.'),
+                        'desc'  => $this->tAdmin('One pattern per line. URLs containing any of these patterns bypass Swup and trigger a full page reload. Standard PrestaShop pages (cart, order, login, my account, etc.) are already excluded automatically — list only additional paths here.'),
                         'cols'  => 60,
                         'rows'  => 4,
                     ],
                     [
                         'type'    => 'switch',
-                        'label'   => $this->l('Mode debug'),
+                        'label'   => $this->tAdmin('Debug mode'),
                         'name'    => self::CFG_DEBUG_ENABLED,
-                        'desc'    => $this->l('Logge les événements détaillés dans la console du navigateur (aucun log côté serveur). À désactiver en production.'),
+                        'desc'    => $this->tAdmin('Logs detailed events to the browser console (no server-side logging). Disable in production.'),
                         'is_bool' => true,
                         'values'  => [
-                            ['id' => 'debug_on',  'value' => 1, 'label' => $this->l('Activé')],
-                            ['id' => 'debug_off', 'value' => 0, 'label' => $this->l('Désactivé')],
+                            ['id' => 'debug_on',  'value' => 1, 'label' => $this->tAdmin('Enabled')],
+                            ['id' => 'debug_off', 'value' => 0, 'label' => $this->tAdmin('Disabled')],
                         ],
                     ],
                 ],
                 'submit' => [
-                    'title' => $this->l('Enregistrer'),
+                    'title' => $this->tAdmin('Save'),
                     'name'  => 'submitOrpConfig',
                     'class' => 'btn btn-default pull-right',
                 ],
@@ -312,7 +376,26 @@ class OnlyRootsPlayer extends Module
             self::CFG_PRODUCT_SELECTORS => Configuration::get(self::CFG_PRODUCT_SELECTORS),
             self::CFG_BUTTON_ANCHOR     => Configuration::get(self::CFG_BUTTON_ANCHOR),
             self::CFG_EXTRA_EXCLUDES    => Configuration::get(self::CFG_EXTRA_EXCLUDES),
+            self::CFG_WATCHDOG_MS       => $this->getWatchdogMs(),
         ];
+    }
+
+    /**
+     * Returns the configured watchdog timeout, clamped to [MIN, MAX] and
+     * defaulting to DEFAULT_WATCHDOG_MS when unset (compat for 2.0.0 installs
+     * that didn't have this key in the database).
+     */
+    private function getWatchdogMs()
+    {
+        $stored = Configuration::get(self::CFG_WATCHDOG_MS);
+        if ($stored === false || $stored === null || $stored === '') {
+            return self::DEFAULT_WATCHDOG_MS;
+        }
+        $val = (int) $stored;
+        if ($val < self::WATCHDOG_MIN_MS || $val > self::WATCHDOG_MAX_MS) {
+            return self::DEFAULT_WATCHDOG_MS;
+        }
+        return $val;
     }
 
     /* ============================================================ */
@@ -383,14 +466,16 @@ class OnlyRootsPlayer extends Module
                 'swupExcludePaths' => $this->getSwupExcludePaths(),
                 'productSelectors' => $productSel,
                 'buttonAnchor'     => $buttonAnchor,
+                'watchdogMs'       => $this->getWatchdogMs(),
+                'watchdogMaxMs'    => self::WATCHDOG_MAX_MS,
                 'debug'            => $debug,
             ],
             'onlyrootsPlayerL10n' => [
-                'listenSample'  => $this->l('Écouter un extrait'),
-                'listen'        => $this->l('Écouter'),
-                'pause'         => $this->l('Pause'),
-                'openInPlayer'  => $this->l('Ouvrir dans le lecteur'),
-                'openPlaylist'  => $this->l('Ouvrir cette playlist dans le lecteur persistant'),
+                'listenSample'  => $this->trans('Listen to a sample', [], 'Modules.Onlyrootsplayer.Shop'),
+                'listen'        => $this->trans('Listen', [], 'Modules.Onlyrootsplayer.Shop'),
+                'pause'         => $this->trans('Pause', [], 'Modules.Onlyrootsplayer.Shop'),
+                'openInPlayer'  => $this->trans('Open in player', [], 'Modules.Onlyrootsplayer.Shop'),
+                'openPlaylist'  => $this->trans('Open this playlist in the persistent player', [], 'Modules.Onlyrootsplayer.Shop'),
             ],
         ]);
     }
@@ -401,6 +486,72 @@ class OnlyRootsPlayer extends Module
             return '';
         }
         return $this->fetch('module:' . $this->name . '/views/templates/hook/player-footer.tpl');
+    }
+
+    /* ============================================================ */
+    /*  CACHE INVALIDATION                                          */
+    /* ============================================================ */
+
+    /**
+     * Object lifecycle hooks fired by Papp's ObjectModel-based audio entries.
+     * Names follow the actionObject{ClassName}{Add,Update,Delete}After convention.
+     * If Papp doesn't expose these (older versions), the AdminController hook
+     * below acts as a safety net.
+     */
+    public function hookActionObjectPappAudioPlaylistAddAfter($params)
+    {
+        $this->flushAudioCache();
+    }
+
+    public function hookActionObjectPappAudioPlaylistUpdateAfter($params)
+    {
+        $this->flushAudioCache();
+    }
+
+    public function hookActionObjectPappAudioPlaylistDeleteAfter($params)
+    {
+        $this->flushAudioCache();
+    }
+
+    /**
+     * Fallback: when an admin loads any controller that belongs to the Papp
+     * module, invalidate our cache. This catches cases where Papp performs
+     * raw SQL operations and never fires actionObjectPappAudioPlaylist*.
+     */
+    public function hookActionAdminControllerInitAfter($params)
+    {
+        if (empty($params['controller'])) {
+            return;
+        }
+        $controller = $params['controller'];
+        $module = null;
+        if (is_object($controller) && property_exists($controller, 'module') && $controller->module) {
+            $module = $controller->module;
+            if (is_object($module) && isset($module->name)) {
+                $module = $module->name;
+            }
+        }
+        if ($module !== self::AUDIO_SOURCE_MODULE) {
+            // Also catch by controller class name for non-AdminModuleController flows
+            $class = is_object($controller) ? get_class($controller) : '';
+            if (stripos($class, 'productaudioplaylistplugin') === false) {
+                return;
+            }
+        }
+        $this->flushAudioCache();
+    }
+
+    /**
+     * Drops every cached `getProductsWithAudio` entry. Cache::clean() accepts
+     * shell-style globs in PrestaShop's CacheCore implementation.
+     */
+    private function flushAudioCache()
+    {
+        try {
+            Cache::clean('orp_with_audio_*');
+        } catch (Exception $e) {
+            // never let a cache flush failure break an admin save
+        }
     }
 
     /* ============================================================ */

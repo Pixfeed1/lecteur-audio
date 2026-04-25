@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" version="1.2">
+  <file source-language="en-US" target-language="fr-FR" datatype="plaintext" original="ModulesOnlyrootsplayerAdmin.en-US.xlf">
+    <header>
+      <tool tool-id="onlyrootsplayer" tool-name="OnlyRoots Persistent Audio Player"/>
+    </header>
+    <body>
+      <trans-unit id="1" resname="OnlyRoots — Persistent audio player">
+        <source>OnlyRoots — Persistent audio player</source>
+        <target>OnlyRoots — Lecteur audio persistant</target>
+      </trans-unit>
+      <trans-unit id="2" resname="Persistent cross-page audio player with optional SPA navigation. Theme-agnostic for PrestaShop 8 via configurable selectors.">
+        <source>Persistent cross-page audio player with optional SPA navigation. Theme-agnostic for PrestaShop 8 via configurable selectors.</source>
+        <target>Lecteur audio persistant cross-pages avec navigation SPA optionnelle. Compatible avec n'importe quel thème PrestaShop 8 via sélecteurs configurables.</target>
+      </trans-unit>
+      <trans-unit id="3" resname="Uninstall OnlyRoots Player and remove all of its configuration?">
+        <source>Uninstall OnlyRoots Player and remove all of its configuration?</source>
+        <target>Désinstaller OnlyRoots Player et supprimer toute sa configuration ?</target>
+      </trans-unit>
+      <trans-unit id="4" resname="This module requires the &quot;%s&quot; module to be installed and active.">
+        <source>This module requires the "%s" module to be installed and active.</source>
+        <target>Ce module nécessite que le module « %s » soit installé et actif.</target>
+      </trans-unit>
+      <trans-unit id="5" resname="The audio source module &quot;%s&quot; is not installed or its database table is missing. The player will not display anywhere until that module is active.">
+        <source>The audio source module "%s" is not installed or its database table is missing. The player will not display anywhere until that module is active.</source>
+        <target>Le module source audio « %s » n'est pas installé ou sa table de base de données est manquante. Le lecteur ne s'affichera nulle part tant que ce module ne sera pas actif.</target>
+      </trans-unit>
+      <trans-unit id="6" resname="Settings saved.">
+        <source>Settings saved.</source>
+        <target>Paramètres enregistrés.</target>
+      </trans-unit>
+      <trans-unit id="7" resname="OnlyRoots Player — Configuration">
+        <source>OnlyRoots Player — Configuration</source>
+        <target>OnlyRoots Player — Configuration</target>
+      </trans-unit>
+      <trans-unit id="8" resname="All theme-dependent selectors are configurable below. Start with the defaults; only change them if your theme uses different DOM markup.">
+        <source>All theme-dependent selectors are configurable below. Start with the defaults; only change them if your theme uses different DOM markup.</source>
+        <target>Tous les sélecteurs dépendants du thème sont configurables ci-dessous. Utilisez d'abord les valeurs par défaut ; ne les modifiez que si votre thème utilise un balisage DOM différent.</target>
+      </trans-unit>
+      <trans-unit id="9" resname="Enable SPA navigation (Swup)">
+        <source>Enable SPA navigation (Swup)</source>
+        <target>Activer la navigation SPA (Swup)</target>
+      </trans-unit>
+      <trans-unit id="10" resname="When enabled, page transitions happen via fetch + DOM replacement, keeping audio playing across navigations. If your theme is incompatible, disable this option — the player still works in standalone mode via localStorage.">
+        <source>When enabled, page transitions happen via fetch + DOM replacement, keeping audio playing across navigations. If your theme is incompatible, disable this option — the player still works in standalone mode via localStorage.</source>
+        <target>Quand activé, les transitions entre pages se font via fetch + remplacement DOM, en gardant l'audio en lecture pendant les navigations. Si votre thème est incompatible, désactivez cette option — le lecteur continue de fonctionner en mode autonome via localStorage.</target>
+      </trans-unit>
+      <trans-unit id="11" resname="Enabled">
+        <source>Enabled</source>
+        <target>Activé</target>
+      </trans-unit>
+      <trans-unit id="12" resname="Disabled">
+        <source>Disabled</source>
+        <target>Désactivé</target>
+      </trans-unit>
+      <trans-unit id="13" resname="Swup container selector(s)">
+        <source>Swup container selector(s)</source>
+        <target>Sélecteur(s) du conteneur Swup</target>
+      </trans-unit>
+      <trans-unit id="14" resname="CSS selector(s) for the main content area to swap during navigation. Multiple comma-separated selectors act as fallbacks (first one that matches and contains a product card wins). Default: %selectors%">
+        <source>CSS selector(s) for the main content area to swap during navigation. Multiple comma-separated selectors act as fallbacks (first one that matches and contains a product card wins). Default: %selectors%</source>
+        <target>Sélecteur(s) CSS de la zone de contenu principale à remplacer pendant la navigation. Plusieurs sélecteurs séparés par des virgules servent de fallback (le premier qui matche ET qui contient une fiche produit gagne). Défaut : %selectors%</target>
+      </trans-unit>
+      <trans-unit id="15" resname="Product card selector(s)">
+        <source>Product card selector(s)</source>
+        <target>Sélecteur(s) des fiches produit</target>
+      </trans-unit>
+      <trans-unit id="16" resname="CSS selector(s) used to find product cards on listings, where the play buttons are injected. The element must carry a [data-id-product] attribute. Default: %selectors%">
+        <source>CSS selector(s) used to find product cards on listings, where the play buttons are injected. The element must carry a [data-id-product] attribute. Default: %selectors%</source>
+        <target>Sélecteur(s) CSS utilisés pour trouver les fiches produit sur les listings, où sont injectés les boutons play. L'élément doit porter un attribut [data-id-product]. Défaut : %selectors%</target>
+      </trans-unit>
+      <trans-unit id="17" resname="Play button anchor selector(s)">
+        <source>Play button anchor selector(s)</source>
+        <target>Sélecteur(s) d'ancrage du bouton play</target>
+      </trans-unit>
+      <trans-unit id="18" resname="Inside each product card, where to insert the inline play button (next to the cart button). Multiple comma-separated selectors are tried in order; the first match wins per card. If no anchor matches, the module falls back to an overlay button on the product image. Default: %selectors%">
+        <source>Inside each product card, where to insert the inline play button (next to the cart button). Multiple comma-separated selectors are tried in order; the first match wins per card. If no anchor matches, the module falls back to an overlay button on the product image. Default: %selectors%</source>
+        <target>Dans chaque fiche produit, où placer le bouton play inline (à côté du bouton panier). Plusieurs sélecteurs séparés par des virgules sont testés dans l'ordre ; le premier qui matche gagne pour chaque fiche. Si aucun ancrage n'est trouvé, le module retombe en fallback sur un bouton en overlay sur l'image produit. Défaut : %selectors%</target>
+      </trans-unit>
+      <trans-unit id="19" resname="Preload links on hover (Swup)">
+        <source>Preload links on hover (Swup)</source>
+        <target>Précharger les liens au survol (Swup)</target>
+      </trans-unit>
+      <trans-unit id="20" resname="Speeds up perceived navigation by preloading pages when the user hovers a link. Slightly increases server load.">
+        <source>Speeds up perceived navigation by preloading pages when the user hovers a link. Slightly increases server load.</source>
+        <target>Accélère la navigation perçue en préchargeant les pages quand l'utilisateur survole un lien. Augmente légèrement la charge serveur.</target>
+      </trans-unit>
+      <trans-unit id="21" resname="Swap watchdog timeout (ms)">
+        <source>Swap watchdog timeout (ms)</source>
+        <target>Délai du watchdog de swap (ms)</target>
+      </trans-unit>
+      <trans-unit id="22" resname="After this timeout (in milliseconds), if a Swup swap has updated the URL but not the content, the module forces a full reload. The runtime adapts this value upwards (capped at %max% ms) for slow shops based on the first successful swap. Default: %default% ms.">
+        <source>After this timeout (in milliseconds), if a Swup swap has updated the URL but not the content, the module forces a full reload. The runtime adapts this value upwards (capped at %max% ms) for slow shops based on the first successful swap. Default: %default% ms.</source>
+        <target>Au-delà de ce délai (en millisecondes), si un swap Swup a changé l'URL mais pas le contenu, le module force un rechargement complet. Le runtime ajuste cette valeur à la hausse (plafonnée à %max% ms) pour les boutiques lentes en fonction du premier swap réussi. Défaut : %default% ms.</target>
+      </trans-unit>
+      <trans-unit id="23" resname="IP whitelist (preview mode)">
+        <source>IP whitelist (preview mode)</source>
+        <target>Whitelist d'IPs (mode preview)</target>
+      </trans-unit>
+      <trans-unit id="24" resname="If filled, Swup is enabled only for these IPs (IPv4 CIDR supported, comma- or newline-separated). Useful to test SPA navigation in production for staff only. Leave empty to enable Swup for everyone.">
+        <source>If filled, Swup is enabled only for these IPs (IPv4 CIDR supported, comma- or newline-separated). Useful to test SPA navigation in production for staff only. Leave empty to enable Swup for everyone.</source>
+        <target>Si rempli, Swup n'est activé que pour ces IPs (CIDR IPv4 supporté, séparées par virgules ou retours à la ligne). Utile pour tester la navigation SPA en production pour le staff uniquement. Laissez vide pour activer Swup pour tout le monde.</target>
+      </trans-unit>
+      <trans-unit id="25" resname="Additional URL exclusion patterns">
+        <source>Additional URL exclusion patterns</source>
+        <target>Motifs d'exclusion d'URL supplémentaires</target>
+      </trans-unit>
+      <trans-unit id="26" resname="One pattern per line. URLs containing any of these patterns bypass Swup and trigger a full page reload. Standard PrestaShop pages (cart, order, login, my account, etc.) are already excluded automatically — list only additional paths here.">
+        <source>One pattern per line. URLs containing any of these patterns bypass Swup and trigger a full page reload. Standard PrestaShop pages (cart, order, login, my account, etc.) are already excluded automatically — list only additional paths here.</source>
+        <target>Un motif par ligne. Les URLs contenant l'un de ces motifs court-circuitent Swup et déclenchent un rechargement complet de la page. Les pages PrestaShop standard (panier, commande, connexion, mon compte, etc.) sont déjà exclues automatiquement — listez ici uniquement les chemins additionnels.</target>
+      </trans-unit>
+      <trans-unit id="27" resname="Debug mode">
+        <source>Debug mode</source>
+        <target>Mode debug</target>
+      </trans-unit>
+      <trans-unit id="28" resname="Logs detailed events to the browser console (no server-side logging). Disable in production.">
+        <source>Logs detailed events to the browser console (no server-side logging). Disable in production.</source>
+        <target>Logge les événements détaillés dans la console du navigateur (aucun log côté serveur). À désactiver en production.</target>
+      </trans-unit>
+      <trans-unit id="29" resname="Save">
+        <source>Save</source>
+        <target>Enregistrer</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>

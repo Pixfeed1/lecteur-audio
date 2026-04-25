@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.0.0
+ * OnlyRoots Persistent Audio Player — v2.1.0
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.0.0
+ * @version   2.1.0
  */
 (function () {
     'use strict';
@@ -434,13 +434,24 @@
     }
 
     function findButtonAnchor(card) {
-        var anchorSel = CONFIG.buttonAnchor || '';
-        if (!anchorSel) return null;
-        try {
-            return card.querySelector(anchorSel);
-        } catch (e) {
-            return null;
+        var raw = CONFIG.buttonAnchor || '';
+        if (!raw) return null;
+
+        // Try each comma-separated selector in order; first match wins.
+        // Previously we passed the whole comma-list to querySelector which
+        // returns the first element matching ANY of the selectors in DOM
+        // order — not necessarily the first selector listed. The new behaviour
+        // honours operator priority.
+        var selectors = raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        for (var i = 0; i < selectors.length; i++) {
+            try {
+                var el = card.querySelector(selectors[i]);
+                if (el) return el;
+            } catch (e) {
+                dlog('invalid buttonAnchor selector', selectors[i], e);
+            }
         }
+        return null;
     }
 
     function findCartButton(card) {
@@ -739,25 +750,50 @@
 
     /**
      * Resolves the configured container selector(s) to an actual DOM element.
-     * The setting accepts comma-separated selectors as fallbacks; the first
-     * selector that matches an element wins.
+     * The setting accepts comma-separated selectors as fallbacks. We try them
+     * in two passes:
+     *   1. Find the first selector whose element exists AND contains at least
+     *      one product card (productSelectors). This is the strong match —
+     *      Swup will swap a region that's actually relevant to listings.
+     *   2. If no selector satisfies the product-card constraint (e.g. CMS
+     *      pages without a product grid), accept the first selector that
+     *      simply exists in the DOM. Swup still works for navigation between
+     *      these pages and we keep the player alive across them.
      *
-     * Returns either { selector, element } or null if no match.
+     * Returns either { selector, element, withProducts } or null if no match.
      */
     function resolveSwupContainer() {
         var raw = (CONFIG.swupContainer || '').trim();
         if (!raw) return null;
 
-        var selectors = raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        var selectors    = raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        var productSel   = (CONFIG.productSelectors || '').trim();
+        var firstExisting = null;
+
         for (var i = 0; i < selectors.length; i++) {
+            var sel = selectors[i];
+            var el  = null;
             try {
-                var el = document.querySelector(selectors[i]);
-                if (el) return { selector: selectors[i], element: el };
+                el = document.querySelector(sel);
             } catch (e) {
-                dlog('invalid container selector', selectors[i], e);
+                dlog('invalid container selector', sel, e);
+                continue;
+            }
+            if (!el) continue;
+            if (!firstExisting) firstExisting = { selector: sel, element: el, withProducts: false };
+
+            if (productSel) {
+                try {
+                    if (el.querySelector(productSel)) {
+                        return { selector: sel, element: el, withProducts: true };
+                    }
+                } catch (e) {
+                    dlog('invalid productSelectors during container resolve', e);
+                }
             }
         }
-        return null;
+
+        return firstExisting; // may be null
     }
 
     /**
@@ -833,10 +869,19 @@
 
         var container = resolveSwupContainer();
         if (!container) {
-            dlog('no Swup container matches the configured selector(s)');
+            // Unconditional warning (not gated by debug) — operators need to
+            // see this in production console to fix their container setting.
+            try {
+                console.warn(
+                    '[ORP] Swup disabled: none of the configured container selectors matched. ' +
+                    'Falling back to standalone (localStorage) mode. ' +
+                    'Configured: "' + (CONFIG.swupContainer || '') + '". ' +
+                    'Check the BO setting "Swup container selector(s)".'
+                );
+            } catch (e) {}
             return false;
         }
-        dlog('swup container resolved to', container.selector);
+        dlog('swup container resolved to', container.selector, 'withProducts=', container.withProducts);
 
         var plugins = [];
         if (typeof window.SwupHeadPlugin === 'function')      plugins.push(new window.SwupHeadPlugin());
@@ -883,6 +928,25 @@
 
         bindSwupHooks();
         return true;
+    }
+
+    /**
+     * Returns the current watchdog timeout in ms. Reads, in order of priority:
+     *   1. The previously-measured value cached in sessionStorage (adaptive)
+     *   2. The BO-configured CONFIG.watchdogMs
+     *   3. The hardcoded 1500ms fallback (compat for installs upgrading from
+     *      v2.0.0 where CONFIG.watchdogMs may be missing)
+     */
+    function getWatchdogMs() {
+        var maxMs = parseInt(CONFIG.watchdogMaxMs, 10) || 5000;
+        try {
+            var cached = parseInt(window.sessionStorage.getItem('orp_watchdog_ms'), 10);
+            if (cached && cached > 0) return Math.min(cached, maxMs);
+        } catch (e) {}
+
+        var configured = parseInt(CONFIG.watchdogMs, 10);
+        if (configured && configured > 0) return Math.min(configured, maxMs);
+        return 1500;
     }
 
     function bindSwupHooks() {
@@ -946,6 +1010,27 @@
                 }
             } catch (e) {}
             initProductPage();
+
+            // Adaptive watchdog: measure the actual swap duration and, if it
+            // was slow (> 1s), bump the watchdog timeout for subsequent visits
+            // in this session. This protects shops with slow back-ends from
+            // false-positive watchdog reloads while keeping snappy shops on
+            // the default 1.5s.
+            if (lastVisit.startedAt) {
+                var elapsed = Date.now() - lastVisit.startedAt;
+                if (elapsed > 1000) {
+                    var maxMs    = parseInt(CONFIG.watchdogMaxMs, 10) || 5000;
+                    var newWdMs  = Math.min(elapsed * 2, maxMs);
+                    var current  = getWatchdogMs();
+                    if (newWdMs > current) {
+                        try {
+                            window.sessionStorage.setItem('orp_watchdog_ms', String(newWdMs));
+                            dlog('watchdog adapted from', current, 'to', newWdMs, 'ms (last swap took', elapsed, 'ms)');
+                        } catch (e) {}
+                    }
+                }
+            }
+
             lastVisit.replaced = true;
         });
 
@@ -959,8 +1044,10 @@
             lastVisit.replaced         = false;
 
             if (lastVisit.timer) clearTimeout(lastVisit.timer);
-            // If after 1500ms the URL has changed but the content hasn't,
-            // assume the swap silently failed and force a full reload.
+            // If, after the configured (or adaptive) watchdog window, the URL
+            // has changed but the content hasn't, assume the swap silently
+            // failed and force a full reload.
+            var watchdogMs = getWatchdogMs();
             lastVisit.timer = setTimeout(function () {
                 if (lastVisit.replaced) return;
                 var currentUrl = window.location.href;
@@ -972,10 +1059,10 @@
                 if (urlMatches && !contentChanged) {
                     bumpFailureCount();
                     cleanupSwupHtmlClasses();
-                    dlog('watchdog: forcing full reload', lastVisit.targetUrl);
+                    dlog('watchdog: forcing full reload after', watchdogMs, 'ms', lastVisit.targetUrl);
                     window.location.href = lastVisit.targetUrl;
                 }
-            }, 1500);
+            }, watchdogMs);
         });
 
         swupInstance.hooks.on('visit:end', function () {

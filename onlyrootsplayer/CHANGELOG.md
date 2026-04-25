@@ -1,0 +1,77 @@
+# Changelog
+
+All notable changes to OnlyRoots Persistent Audio Player are documented here.
+This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [2.1.0] — 2026-04-25
+
+### Added
+
+- **Smart Swup container resolution.** When multiple comma-separated container
+  selectors are configured, the runtime now picks the first one that exists
+  AND contains at least one product card (per `productSelectors`). This fixes
+  cases where `#content` matched but pointed to an empty wrapper above the
+  actual listing. Falls back to "first existing" if no selector contains
+  product cards (e.g. CMS pages).
+  *File:* `views/js/player.js` (`resolveSwupContainer`).
+- **Per-card anchor selector iteration.** `buttonAnchor` now honours
+  comma-separated priority order — each selector is tried in order against the
+  product card, first match wins. Previously the first selector matching
+  anywhere in DOM order won, which could place buttons in unexpected locations
+  on themes whose anchor structure varies between cards.
+  *File:* `views/js/player.js` (`findButtonAnchor`).
+- **Adaptive watchdog timeout.** New BO setting `ORP_WATCHDOG_MS` (default
+  1500, range 500–5000). The runtime now also measures the duration of the
+  first successful Swup swap; if that swap took > 1000 ms, the watchdog window
+  is bumped to `min(duration × 2, 5000)` ms for the rest of the session and
+  cached in `sessionStorage["orp_watchdog_ms"]`. Slow shops no longer get
+  false-positive full-reload watchdog triggers.
+  *Files:* `onlyrootsplayer.php` (config var + BO field),
+  `views/js/player.js` (`getWatchdogMs`, watchdog adaptation in
+  `content:replace` and `visit:start`).
+- **Audio cache invalidation.** Four new hook handlers — three on the Papp
+  ObjectModel lifecycle (`actionObjectPappAudioPlaylist{Add,Update,Delete}After`)
+  and one safety net on `actionAdminControllerInitAfter` — flush
+  `orp_with_audio_*` cache entries whenever the Papp data changes. Adding a
+  new audio file from the back-office now becomes visible immediately on
+  product listings instead of waiting for the cache to expire.
+  *File:* `onlyrootsplayer.php` (new `flushAudioCache` + handlers).
+- **`translations/fr-FR/ModulesOnlyrootsplayerAdmin.xlf`** and
+  **`ModulesOnlyrootsplayerShop.xlf`** — proper PrestaShop 8 XLIFF translation
+  files. All `$this->l(...)` and `{l s='...'}` calls now use English source
+  keys, with French translations served from the XLF on FR shops.
+- **Console warning** when no Swup container selector matches the DOM. Always
+  emitted (not gated by debug mode), so production operators see misconfigured
+  selectors in the browser console immediately.
+
+### Changed
+
+- **`audioSourceAvailable()` is now request-cached.** A static `$cached` member
+  short-circuits the `SHOW TABLES` query after the first call. Previously this
+  ran on every front controller bootstrap, costing one extra round-trip on
+  every page.
+  *File:* `onlyrootsplayer.php`.
+- **`install()` no longer overwrites existing config values.** Configuration
+  defaults are only written for keys that are missing — existing 2.0.0
+  installations keep all of their tuned settings on upgrade.
+  *File:* `onlyrootsplayer.php`.
+- **All user-facing strings migrated to English source keys** with the
+  `Modules.Onlyrootsplayer.{Admin,Shop}` translation domains. Aligns with
+  PrestaShop 8's recommended XLIFF workflow.
+- **Module version bumped** to `2.1.0` in `config.xml`, `onlyrootsplayer.php`,
+  and `views/js/player.js`.
+
+### Backwards compatibility
+
+No breaking changes. Specifically:
+
+- Existing 2.0.0 configuration in the `ps_configuration` table is preserved.
+  The `install()` upgrade path only writes new keys (`ORP_WATCHDOG_MS`).
+- The new `getWatchdogMs()` PHP helper falls back to the default when the
+  config key is missing, so shops that haven't visited the BO since the
+  upgrade still get a working watchdog.
+- The JS `getWatchdogMs()` helper falls back to 1500 ms if
+  `CONFIG.watchdogMs` is missing — protects against stale browser caches
+  serving the old `player.js` against the new PHP.
+- The Smarty template still works on shops that don't have the XLF
+  translations loaded yet — the English source string is rendered as-is.
