@@ -3,6 +3,76 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] — 2026-04-27
+
+### Added — diagnostic monitor
+
+A purpose-built telemetry layer designed to break the cycle of
+"investigation au pifomètre" we've been stuck in. New BO toggle
+`ORP_MONITOR_ENABLED` (off by default). When activated, the module:
+
+- Loads a standalone `views/js/monitor.js` BEFORE `player.js`. The
+  monitor captures:
+  - Global JS errors (`window.onerror`)
+  - Unhandled promise rejections (`window.unhandledrejection`)
+  - Swup lifecycle events: `visit:start`, `content:replace`, `visit:end`,
+    `visit:abort`, `fetch:error`
+  - DOM snapshots before/after each `content:replace`, with diffs on:
+    `<body>` classes, `<html>` classes, `<body>`/`<html>` datasets, header
+    and footer presence, sticky-wrapper count, megamenu item count,
+    product miniature count, slider count, image-load ratio, inline
+    `<style>` tag count.
+  - Theme preset failures (e.g. `prestashop.on is not a function` from
+    the legacy `$(window).trigger('load')` snippet) surface as
+    `orp:preset:error` events.
+- POSTs events in batches via `navigator.sendBeacon` (with `fetch`
+  fallback) to a new front controller `controllers/front/monitor.php`
+  that:
+  - Accepts only POST.
+  - Enforces same-origin via the `Origin`/`Referer` header.
+  - Rate-limits via the visitor's session: max 30 events / 60 seconds.
+  - Caps each event line at 4096 bytes.
+  - Validates event types against a whitelist; everything else dropped.
+  - Strips control characters and caps each value at 512 chars before
+    writing.
+  - Writes to `var/monitor.log` inside the module directory, with
+    automatic rotation when the file passes 1 MiB (keeps the last 512
+    KiB plus a `[rotated …]` marker).
+- Surfaces the log in the BO configuration page: a new "Diagnostic"
+  panel above the configuration form shows the latest log entries in a
+  scrollable monospace block, with **Vider le log** and
+  **Télécharger le log** buttons. The panel is always visible (operators
+  can read past captures even after disabling the monitor).
+
+### Privacy
+
+The monitor never logs query strings, cookies, headers, form data, or
+any value outside its predefined snapshot schema. URLs are reduced to
+path-only before transmission.
+
+### How to use
+
+1. BO → OnlyRoots Player → Configurer → set **Moniteur diagnostique** to
+   `Activé`, save, vider le cache PS.
+2. Reproduce the bug in browser (the home, a navigation, etc.). Wait a
+   few seconds for the batched POST to flush (or simply close the tab —
+   the buffer is flushed on `pagehide`).
+3. Reload the BO config page. The "Diagnostic" panel above the form
+   now shows the captured events. Click **Télécharger le log** to grab
+   the file as an attachment for further analysis.
+4. When done, switch the toggle off and **Vider le log**.
+
+### Files added
+
+- `controllers/front/monitor.php` — POST receiver, ~280 lines.
+- `views/js/monitor.js` — front-end capture, ~250 lines.
+- `var/index.php` — anti-listing, log lives in `var/monitor.log`.
+
+### Backwards compatibility
+
+Off by default — installs upgrading from 2.3.2 see no change in
+behaviour until they flip the toggle.
+
 ## [2.3.2] — 2026-04-27
 
 ### Fixed

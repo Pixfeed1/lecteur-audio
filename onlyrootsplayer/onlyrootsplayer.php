@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.3.2
+ * @version   2.4.0
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -38,6 +38,7 @@ class OnlyRootsPlayer extends Module
     const CFG_WATCHDOG_MS       = 'ORP_WATCHDOG_MS';
     const CFG_POST_SWAP_JS      = 'ORP_POST_SWAP_JS';
     const CFG_THEME_PRESET      = 'ORP_THEME_PRESET';
+    const CFG_MONITOR_ENABLED   = 'ORP_MONITOR_ENABLED';
 
     /* Defaults — written on install, restorable from BO */
     const DEFAULT_CONTAINER         = '#content-wrapper, #content, main, #main';
@@ -54,11 +55,18 @@ class OnlyRootsPlayer extends Module
     const THEME_PRESET_ZONETHEME  = 'zonetheme';
     const VALID_THEME_PRESETS     = [self::THEME_PRESET_NONE, self::THEME_PRESET_ZONETHEME];
 
+    /* Diagnostic monitor (off by default — opt-in feature for debugging). */
+    const MONITOR_LOG_RELPATH       = 'var/monitor.log';
+    const MONITOR_LOG_MAX_BYTES     = 1048576; // 1 MiB rotation threshold
+    const MONITOR_RATE_LIMIT_WINDOW = 60;       // seconds
+    const MONITOR_RATE_LIMIT_MAX    = 30;       // events per window per session
+    const MONITOR_EVENT_MAX_LEN     = 4096;     // bytes per single event line
+
     public function __construct()
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.3.2';
+        $this->version          = '2.4.0';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -115,10 +123,11 @@ class OnlyRootsPlayer extends Module
             self::CFG_WATCHDOG_MS       => self::DEFAULT_WATCHDOG_MS,
             self::CFG_POST_SWAP_JS      => '',
             // SAFE DEFAULT: 'none' until we have a confirmed root cause and
-            // staging-validated fix for the v2.3.2 production breakage. Operators
+            // staging-validated fix for the v2.4.0 production breakage. Operators
             // on ZOneTheme must opt in via BO after testing in staging with the
             // F12 console open to capture any reinit-related errors.
             self::CFG_THEME_PRESET      => self::THEME_PRESET_NONE,
+            self::CFG_MONITOR_ENABLED   => 0,
         ];
         // updateValue is an upsert — existing 2.0.0 installs keep their values,
         // only the new keys (e.g. WATCHDOG_MS) get the default written.
@@ -127,6 +136,11 @@ class OnlyRootsPlayer extends Module
                 Configuration::updateValue($key, $val);
             }
         }
+
+        // Diagnostic monitor needs a writable subdirectory inside the module.
+        // Create it on install with an anti-listing index.php so it's safe
+        // even if the operator never enables the feature.
+        $this->ensureMonitorDirectory();
 
         return parent::install()
             && $this->registerHook('displayFooter')
@@ -152,6 +166,7 @@ class OnlyRootsPlayer extends Module
             self::CFG_WATCHDOG_MS,
             self::CFG_POST_SWAP_JS,
             self::CFG_THEME_PRESET,
+            self::CFG_MONITOR_ENABLED,
         ];
         foreach ($keys as $k) {
             Configuration::deleteByName($k);
@@ -188,6 +203,24 @@ class OnlyRootsPlayer extends Module
     {
         $output = '';
 
+        // Monitor maintenance actions are processed BEFORE the panel renders
+        // so the panel reflects the post-action state on the same page load.
+        if (Tools::isSubmit('submitOrpClearMonitorLog')) {
+            if ($this->clearMonitorLog()) {
+                $output .= $this->displayConfirmation(
+                    $this->tAdmin('Log de diagnostic vidé.')
+                );
+            } else {
+                $output .= $this->displayError(
+                    $this->tAdmin('Impossible de vider le log (vérifier les permissions sur var/monitor.log).')
+                );
+            }
+        }
+        if (Tools::isSubmit('submitOrpDownloadMonitorLog')) {
+            $this->downloadMonitorLog();
+            // downloadMonitorLog() exits — execution never reaches here.
+        }
+
         if (Tools::isSubmit('submitOrpConfig')) {
             $output .= $this->postProcess();
         }
@@ -202,7 +235,107 @@ class OnlyRootsPlayer extends Module
             );
         }
 
-        return $output . $this->renderForm();
+        return $output . $this->renderMonitorPanel() . $this->renderForm();
+    }
+
+    /**
+     * Renders the diagnostic panel (read-only log view + clear/download
+     * buttons). Shown above the configuration form. Always visible — the
+     * monitor is opt-in via the form switch, but operators can read past
+     * captures or download a log even after disabling the monitor.
+     */
+    private function renderMonitorPanel()
+    {
+        $log     = $this->readMonitorLog();
+        $logSafe = htmlspecialchars($log, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $size    = strlen($log);
+        $sizeKb  = number_format($size / 1024, 1);
+
+        $heading = htmlspecialchars(
+            $this->tAdmin('Diagnostic — Moniteur d\'événements'),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
+        $blurb = htmlspecialchars(
+            $this->tAdmin(
+                'Les événements collectés par le moniteur (erreurs JS, hooks Swup, diffs DOM) sont écrits dans var/monitor.log et affichés ci-dessous (du plus ancien au plus récent). Activez le moniteur dans le formulaire de configuration ci-dessous pour démarrer la collecte.'
+            ),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
+        $sizeLabel  = htmlspecialchars(
+            sprintf($this->tAdmin('Taille actuelle : %s Ko (plafond : 1024 Ko avant rotation).'), $sizeKb),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
+        $emptyLabel = htmlspecialchars(
+            $this->tAdmin('— log vide —'),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
+        $clearLabel = htmlspecialchars(
+            $this->tAdmin('Vider le log'),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
+        $downloadLabel = htmlspecialchars(
+            $this->tAdmin('Télécharger le log'),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
+        $confirmClear = htmlspecialchars(
+            $this->tAdmin('Vider le log de diagnostic ?'),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
+
+        $action = htmlspecialchars(
+            $this->context->link->getAdminLink('AdminModules', false)
+                . '&configure=' . $this->name . '&tab_module=' . $this->tab . '&module_name=' . $this->name,
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8'
+        );
+
+        $logHtml = $log === ''
+            ? '<em>' . $emptyLabel . '</em>'
+            : '<pre style="max-height:340px;overflow:auto;background:#f8f8f8;border:1px solid #ddd;padding:10px;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;">'
+                . $logSafe . '</pre>';
+
+        return '<div class="panel" style="margin-bottom:16px;">'
+            . '<div class="panel-heading"><i class="icon-stethoscope"></i> ' . $heading . '</div>'
+            . '<p>' . $blurb . '</p>'
+            . '<p style="color:#666;font-size:12px;">' . $sizeLabel . '</p>'
+            . $logHtml
+            . '<form method="post" action="' . $action . '" style="margin-top:10px;display:inline-block;" onsubmit="return confirm(\'' . $confirmClear . '\');">'
+            . '<button type="submit" name="submitOrpClearMonitorLog" class="btn btn-default"><i class="icon-trash"></i> ' . $clearLabel . '</button>'
+            . '</form>'
+            . ' <form method="post" action="' . $action . '" style="margin-top:10px;display:inline-block;">'
+            . '<button type="submit" name="submitOrpDownloadMonitorLog" class="btn btn-default"><i class="icon-download"></i> ' . $downloadLabel . '</button>'
+            . '</form>'
+            . '</div>';
+    }
+
+    /**
+     * Streams the monitor log file as an attachment. Exits the request — the
+     * caller must not produce any further output.
+     */
+    private function downloadMonitorLog()
+    {
+        $log = $this->readMonitorLog();
+        $filename = 'orp-monitor-' . date('Ymd-His') . '.log';
+
+        // Discard whatever buffering PrestaShop has set up so the binary
+        // payload reaches the browser cleanly.
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . strlen($log));
+        header('Cache-Control: no-store');
+        echo $log;
+        exit;
     }
 
     protected function postProcess()
@@ -227,6 +360,7 @@ class OnlyRootsPlayer extends Module
             // already so we only cast to string here.
             self::CFG_POST_SWAP_JS      => (string) Tools::getValue(self::CFG_POST_SWAP_JS),
             self::CFG_THEME_PRESET      => $this->sanitizeThemePreset(Tools::getValue(self::CFG_THEME_PRESET)),
+            self::CFG_MONITOR_ENABLED   => (int) Tools::getValue(self::CFG_MONITOR_ENABLED),
         ];
 
         // Restore defaults on empty fields rather than letting the front break
@@ -359,6 +493,17 @@ class OnlyRootsPlayer extends Module
                         ],
                     ],
                     [
+                        'type'    => 'switch',
+                        'label'   => $this->tAdmin('Moniteur diagnostique'),
+                        'name'    => self::CFG_MONITOR_ENABLED,
+                        'desc'    => $this->tAdmin('Active la collecte d\'événements de diagnostic côté front (erreurs JS, hooks Swup, anomalies DOM avant/après chaque swap) et leur écriture dans var/monitor.log. Le log est plafonné à 1 Mo et rotaté automatiquement. À activer pour investigation en staging — laisser désactivé en production sauf besoin spécifique. Le contenu du log s\'affiche dans la section « Diagnostic » au-dessus de ce formulaire.'),
+                        'is_bool' => true,
+                        'values'  => [
+                            ['id' => 'monitor_on',  'value' => 1, 'label' => $this->tAdmin('Activé')],
+                            ['id' => 'monitor_off', 'value' => 0, 'label' => $this->tAdmin('Désactivé')],
+                        ],
+                    ],
+                    [
                         'type'    => 'select',
                         'label'   => $this->tAdmin('Preset de réinit thème'),
                         'name'    => self::CFG_THEME_PRESET,
@@ -423,7 +568,75 @@ class OnlyRootsPlayer extends Module
             self::CFG_WATCHDOG_MS       => $this->getWatchdogMs(),
             self::CFG_POST_SWAP_JS      => (string) Configuration::get(self::CFG_POST_SWAP_JS),
             self::CFG_THEME_PRESET      => $this->getThemePreset(),
+            self::CFG_MONITOR_ENABLED   => (int) Configuration::get(self::CFG_MONITOR_ENABLED),
         ];
+    }
+
+    /* ============================================================ */
+    /*  DIAGNOSTIC MONITOR HELPERS                                  */
+    /* ============================================================ */
+
+    /**
+     * Absolute filesystem path to the monitor log file. Always inside the
+     * module directory so backups, file permissions, and module-uninstall
+     * cleanups all behave predictably.
+     */
+    private function getMonitorLogPath()
+    {
+        return _PS_MODULE_DIR_ . $this->name . '/' . self::MONITOR_LOG_RELPATH;
+    }
+
+    /**
+     * Creates `var/` inside the module on install, drops an anti-listing
+     * index.php and an empty log file. Idempotent — safe to call on
+     * subsequent installs.
+     */
+    private function ensureMonitorDirectory()
+    {
+        $dir = _PS_MODULE_DIR_ . $this->name . '/var';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+
+        $indexPath = $dir . '/index.php';
+        if (!is_file($indexPath)) {
+            // Same anti-listing pattern as every other module subdirectory.
+            $stub = "<?php\nheader('Location: ../');\nexit;\n";
+            @file_put_contents($indexPath, $stub);
+        }
+
+        $logPath = $this->getMonitorLogPath();
+        if (!is_file($logPath)) {
+            @file_put_contents($logPath, '');
+            @chmod($logPath, 0644);
+        }
+    }
+
+    /**
+     * Reads the monitor log, capped at the last MONITOR_LOG_MAX_BYTES bytes.
+     * Returns '' if the file is missing or unreadable.
+     */
+    public function readMonitorLog()
+    {
+        $path = $this->getMonitorLogPath();
+        if (!is_file($path) || !is_readable($path)) {
+            return '';
+        }
+        $content = @file_get_contents($path);
+        return $content === false ? '' : $content;
+    }
+
+    /**
+     * Truncates the monitor log to zero bytes. Returns true on success.
+     */
+    public function clearMonitorLog()
+    {
+        $path = $this->getMonitorLogPath();
+        if (!is_file($path)) {
+            $this->ensureMonitorDirectory();
+            return true;
+        }
+        return @file_put_contents($path, '') !== false;
     }
 
     /**
@@ -523,6 +736,20 @@ class OnlyRootsPlayer extends Module
             }
         }
 
+        // Diagnostic monitor (opt-in). Loaded BEFORE player.js so the
+        // monitor's window.onerror handler is in place before our own code
+        // can throw — gives us coverage on player.js init errors too.
+        if ((int) Configuration::get(self::CFG_MONITOR_ENABLED) === 1) {
+            $monitorPath = $modulePath . 'views/js/monitor.js';
+            if (file_exists($monitorPath)) {
+                $this->context->controller->registerJavascript(
+                    'onlyrootsplayer-monitor',
+                    'modules/' . $this->name . '/views/js/monitor.js',
+                    ['position' => 'bottom', 'priority' => 190, 'version' => $this->fileVersion($monitorPath)]
+                );
+            }
+        }
+
         // Player JS
         $jsVer = $this->fileVersion($modulePath . 'views/js/player.js');
         $this->context->controller->registerJavascript(
@@ -557,6 +784,8 @@ class OnlyRootsPlayer extends Module
                 'watchdogMaxMs'    => self::WATCHDOG_MAX_MS,
                 'postSwapJs'       => (string) Configuration::get(self::CFG_POST_SWAP_JS),
                 'themePreset'      => $this->getThemePreset(),
+                'monitorEnabled'   => (int) Configuration::get(self::CFG_MONITOR_ENABLED) === 1,
+                'monitorEndpoint'  => $this->context->link->getModuleLink($this->name, 'monitor'),
                 'debug'            => $debug,
             ],
             'onlyrootsPlayerL10n' => [

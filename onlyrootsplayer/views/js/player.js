@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.3.0
+ * OnlyRoots Persistent Audio Player — v2.4.0
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.3.0
+ * @version   2.4.0
  */
 (function () {
     'use strict';
@@ -897,6 +897,10 @@
         }
 
         try {
+            // Expose the Swup instance for the optional diagnostic monitor
+            // (loaded separately as monitor.js) which polls for it and binds
+            // its own hooks for visit lifecycle telemetry.
+            // The assignment happens AFTER successful instantiation below.
             swupInstance = new window.Swup({
                 containers: [container.selector],
                 animationSelector: false,
@@ -927,6 +931,7 @@
         }
 
         bindSwupHooks();
+        try { window.__orpSwup = swupInstance; } catch (e) {}
         return true;
     }
 
@@ -1031,6 +1036,15 @@
                     window.orpThemePresets[presetName]({ trigger: 'swup-content-replace' });
                 } catch (e) {
                     try { console.warn('[ORP] theme preset "' + presetName + '" error:', e); } catch (err) {}
+                    // Surface in the diagnostic monitor when enabled.
+                    if (window.__orpMonitorEnqueue) {
+                        try {
+                            window.__orpMonitorEnqueue('orp:preset:error', {
+                                preset: presetName,
+                                message: (e && e.message) ? String(e.message).substring(0, 400) : 'unknown',
+                            });
+                        } catch (mErr) {}
+                    }
                 }
             }
 
