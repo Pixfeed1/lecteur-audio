@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.4.2
+ * @version   2.4.3
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -66,7 +66,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.4.2';
+        $this->version          = '2.4.3';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -123,7 +123,7 @@ class OnlyRootsPlayer extends Module
             self::CFG_WATCHDOG_MS       => self::DEFAULT_WATCHDOG_MS,
             self::CFG_POST_SWAP_JS      => '',
             // SAFE DEFAULT: 'none' until we have a confirmed root cause and
-            // staging-validated fix for the v2.4.2 production breakage. Operators
+            // staging-validated fix for the v2.4.3 production breakage. Operators
             // on ZOneTheme must opt in via BO after testing in staging with the
             // F12 console open to capture any reinit-related errors.
             self::CFG_THEME_PRESET      => self::THEME_PRESET_NONE,
@@ -893,13 +893,23 @@ class OnlyRootsPlayer extends Module
         $excludes = [];
 
         // Built-in PrestaShop pages we never want SPA-loaded (forms, payment,
-        // session-sensitive flows). Pulled from Link::getPageLink() so they
-        // match whatever URL rewrite + language the shop uses.
+        // session-sensitive flows, or pages with a custom layout that breaks
+        // when its container is swapped instead of the document being
+        // reloaded). Pulled from Link::getPageLink() so they match whatever
+        // URL rewrite + language the shop uses.
+        //
+        // `contact`, `sitemap`, `stores` are layout-fragile: their templates
+        // sometimes diverge from the standard layout (no megamenu, different
+        // wrapper structure), and Swup ends up with a half-swapped page
+        // missing the header/footer (observed on OnlyRoots Reggae /
+        // ZOneTheme on /fr/nous-contacter — captured in the v2.4.3 monitor
+        // log).
         $pageNames = [
             'cart', 'order', 'order-confirmation', 'authentication',
             'identity', 'address', 'addresses', 'history', 'order-follow',
             'order-slip', 'guest-tracking', 'password', 'my-account',
             'discount', 'order-detail', 'module-payment',
+            'contact', 'sitemap', 'stores',
         ];
         foreach ($pageNames as $page) {
             try {

@@ -3,6 +3,32 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.3] — 2026-04-27
+
+### Fixed
+
+- **Contact / sitemap / stores pages now bypass Swup by default.** The
+  v2.4.2 monitor capture on OnlyRoots Reggae proved `/fr/nous-contacter`
+  triggered a catastrophic swap: `<html>` lost all classes, the header
+  and footer disappeared, the megamenu went from 6 items to 0, every
+  inline `<style>` was wiped. The contact page template diverges enough
+  from the standard layout that Swup's container resolution lands on
+  the wrong element and effectively hollows out the page.
+
+  `contact`, `sitemap`, and `stores` are now listed in the standard
+  PrestaShop pages that bypass Swup (alongside `cart`, `order`,
+  `authentication`, etc.). The exclusion uses `Link::getPageLink()` so
+  it adapts to the shop's language and friendly URL settings — `/fr/
+  nous-contacter`, `/en/contact-us`, `/de/kontakt`, all caught
+  automatically. Operators no longer need to add these manually to
+  `ORP_EXTRA_EXCLUDES`.
+
+### Backwards compatibility
+
+No breaking change. Operators who already added `/nous-contacter` (or
+similar) to their `ORP_EXTRA_EXCLUDES` setting can leave it there — the
+two lists are merged and deduplicated by `getSwupExcludePaths()`.
+
 ## [2.4.2] — 2026-04-27
 
 Calibrated against the actual ZOneTheme v2.7.3 source archive (provided
