@@ -3,6 +3,62 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4] — 2026-04-27
+
+Two follow-up fixes informed by the v2.4.3 monitor capture:
+- `homeBlockSliders=7 sliders: "0" -> "7"` confirmed the slider re-init
+  works when navigating back to home via Swup. Main bug solved.
+- A leftover catastrophic swap was still happening when departing from
+  `/fr/nous-contacter` (added to bypass list in 2.4.3, but the bypass
+  only covers links *to* the contact page — links *from* it still went
+  through Swup with a misresolved container).
+- Hero NivoSlider on `#aoneSlider` reports `aoneSlider=0` consistently;
+  this is expected, not a bug — the hero block sits outside Swup's
+  swap container and stays alive across navigations (autoplay
+  continues, no re-init needed).
+
+### Fixed
+
+- **Catastrophic swap recovery.** The `content:replace` Swup hook now
+  detects when a swap left the page without a `<header>` element. When
+  it does, the module bails to a full reload of the destination URL via
+  `window.location.assign(visit.to.url)` instead of letting the user
+  see a half-rendered page (no header, no footer, no megamenu, no
+  inline styles — exactly the state captured in the v2.4.3 monitor for
+  `/fr/nous-contacter -> /fr/`). Surfaces as
+  `orp:catastrophic-swap-recovered` in the monitor log so we can track
+  which URL pairs trigger the recovery.
+
+### Improved
+
+- **Persistent body class capture is now continuous.** v2.4.1 captured
+  the persistent classes (`country-fr`, `lang-fr`, `currency-eur` etc.)
+  once at init. If the user landed on a category page (which strips
+  these classes on ZOneTheme), the cached set was empty and restoration
+  did nothing on subsequent swaps. The new
+  `topUpPersistentBodyClasses()` runs after every `content:replace` and
+  unions any new persistent classes seen on the post-swap body into the
+  cached set. Once the user visits a "complete" page (home, product),
+  the cache is populated for all subsequent navigations.
+
+### Telemetry
+
+New event type `orp:catastrophic-swap-recovered` whitelisted in
+`controllers/front/monitor.php`. Each occurrence logs the destination
+URL and which landmark was missing (`header` for now; future versions
+may detect missing footer/megamenu/sticky individually).
+
+### Known limitation (not a bug)
+
+The hero slider (`#aoneSlider`, jQuery NivoSlider) does not get
+re-initialised after a Swup return to home. This is intentional — the
+slider element is in a hook block placed outside Swup's swap container
+on most ZOneTheme deployments, so the original slider stays alive
+across navigations and autoplay continues unchanged. The
+`aoneSlider=0` count in `orp:preset:invoked` reflects this: the preset
+correctly skips the slider when it sees the existing `.nivoSlider`
+class.
+
 ## [2.4.3] — 2026-04-27
 
 ### Fixed

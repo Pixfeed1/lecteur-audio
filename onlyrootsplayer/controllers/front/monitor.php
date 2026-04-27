@@ -40,6 +40,7 @@ class OnlyrootsplayerMonitorModuleFrontController extends ModuleFrontController
         'orp:preset:error',
         'orp:preset:invoked',
         'orp:body-class-restored',
+        'orp:catastrophic-swap-recovered',
         'dom:diff',
         'dom:snapshot',
         'orp:player:init',

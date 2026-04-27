@@ -1021,7 +1021,35 @@
             }
         });
 
-        swupInstance.hooks.on('content:replace', function () {
+        swupInstance.hooks.on('content:replace', function (visit) {
+            // CATASTROPHIC SWAP DETECTOR. If the swap left the page without
+            // a header element, we're in the same broken state we observed
+            // on /fr/nous-contacter -> /fr/ in the v2.4.3 monitor capture
+            // (htmlClasses wiped, hasHeader true->false, megamenu items
+            // 6->0). The cause is a Swup container resolution mismatch
+            // between the source page and the destination — usually the
+            // source page (a CMS / contact / etc. with non-standard layout)
+            // gave Swup a too-broad container at init, and the destination
+            // page's content is being inserted at the wrong DOM level.
+            //
+            // Recovery: bail to a full reload of the destination URL. The
+            // user loses the SPA continuity on this single navigation but
+            // gets a working page back instead of a half-rendered one.
+            if (!document.querySelector('header, #header')) {
+                var destUrl = (visit && visit.to && visit.to.url) ? visit.to.url : window.location.href;
+                if (window.__orpMonitorEnqueue) {
+                    try {
+                        window.__orpMonitorEnqueue('orp:catastrophic-swap-recovered', {
+                            destUrl: destUrl,
+                            missing: 'header',
+                        });
+                    } catch (e) {}
+                }
+                try { console.warn('[ORP] catastrophic swap detected (no header) — full reload to', destUrl); } catch (e) {}
+                window.location.assign(destUrl);
+                return;
+            }
+
             scheduleInject();
             try {
                 if (typeof window.prestashop !== 'undefined' && typeof window.prestashop.emit === 'function') {
@@ -1034,6 +1062,12 @@
                 }
             } catch (e) {}
             initProductPage();
+
+            // First, top up the cache with any persistent classes the new
+            // page brought that we didn't know about (handles the case
+            // where the user started on a page lacking country-fr / lang-fr
+            // and only later visits a page that has them).
+            topUpPersistentBodyClasses();
 
             // Restore persistent body classes (lang/country/currency/customer)
             // BEFORE the theme preset runs, in case any theme component reads
@@ -1204,6 +1238,39 @@
             dlog('persistent body classes captured:', persistentBodyClasses);
         } catch (e) {
             dlog('capturePersistentBodyClasses error', e);
+        }
+    }
+
+    /**
+     * Continuous capture: merges any persistent classes seen on the current
+     * (post-swap) body into our cached set. This handles the case where the
+     * user starts on a page that lacks `country-fr lang-fr currency-eur`
+     * (e.g., a category page on ZOneTheme) — without this we'd never know
+     * those classes exist and could never restore them. Call after every
+     * content:replace to keep the cache up to date.
+     */
+    function topUpPersistentBodyClasses() {
+        try {
+            if (!document.body) return;
+            var seen = {};
+            for (var i = 0; i < persistentBodyClasses.length; i++) {
+                seen[persistentBodyClasses[i]] = true;
+            }
+            var current = Array.prototype.slice.call(document.body.classList);
+            for (var j = 0; j < current.length; j++) {
+                var c = current[j];
+                if (seen[c]) continue;
+                for (var k = 0; k < PERSISTENT_BODY_CLASS_PATTERNS.length; k++) {
+                    if (PERSISTENT_BODY_CLASS_PATTERNS[k].test(c)) {
+                        persistentBodyClasses.push(c);
+                        seen[c] = true;
+                        dlog('persistent body class added to cache:', c);
+                        break;
+                    }
+                }
+            }
+        } catch (e) {
+            dlog('topUpPersistentBodyClasses error', e);
         }
     }
 
