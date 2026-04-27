@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.0.0
+ * OnlyRoots Persistent Audio Player — v2.1.1
  *
  * Theme-agnostic stylesheet. All selectors are scoped under .orp-* classes
  * so this stylesheet never collides with the active theme.
@@ -8,6 +8,20 @@
  */
 
 :root {
+    /* ============================================================ */
+    /*  THEME-CALIBRATED VARIABLES (default values target ZOneTheme) */
+    /* ------------------------------------------------------------ */
+    /*  These defaults are calibrated for OnlyRoots Reggae running   */
+    /*  on ZOneTheme: the inline play button must match the cart     */
+    /*  button visually (same size, same grey, same radius).         */
+    /*                                                               */
+    /*  For a different theme, override these in your theme's        */
+    /*  custom.css (or a child theme stylesheet) — every selector    */
+    /*  below uses CSS variables exclusively, so no module file edit */
+    /*  is needed.                                                   */
+    /* ============================================================ */
+
+    /* Footer player chrome (safe to retune per-theme) */
     --orp-bg: #1a1a1a;
     --orp-accent: #e8a838;
     --orp-accent-hover: #f0b848;
@@ -17,8 +31,19 @@
     --orp-bar-fill: #e8a838;
     --orp-height: 72px;
     --orp-z: 9000;
-    --orp-btn-size: 38px;
+
+    /* Inline "Listen" button — calibrated to match the ZOneTheme cart
+       button (grey #a3a2a2, 42×42, radius 6px). Override in your theme
+       for non-ZOneTheme deployments. */
+    --orp-btn-size: 42px;
+    --orp-btn-bg: #a3a2a2;
+    --orp-btn-bg-hover: #868686;
     --orp-btn-radius: 6px;
+
+    /* "Now playing" state — reggae green, intentionally distinct from the
+       orange/gold --orp-accent so the playing state is unambiguous. */
+    --orp-playing-bg: #3f6e51;
+    --orp-playing-bg-hover: #335a42;
 }
 
 /* ============================================================ */
@@ -276,6 +301,10 @@ body.orp-player-active {
  * producing a stray cart icon on the play button).
  */
 
+/* Inline button: visually matches the ZOneTheme cart button (same 42×42
+   square, same grey, same radius, same subtle border + shadow). Sits flush
+   next to the "Add to cart" button. Customise via :root variables, not
+   here — see the variable block at the top of the file. */
 .orp-play-btn-inline {
     display: inline-flex;
     align-items: center;
@@ -284,10 +313,12 @@ body.orp-player-active {
     height: var(--orp-btn-size);
     padding: 0;
     margin: 0 4px 0 0;
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--orp-btn-radius);
-    background: var(--orp-bg);
+    background: var(--orp-btn-bg);
     color: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    box-sizing: border-box;
     cursor: pointer;
     flex-shrink: 0;
     transition: background-color 0.15s ease, transform 0.1s ease;
@@ -297,24 +328,31 @@ body.orp-player-active {
 .orp-play-btn-inline::before {
     content: '';
     display: block;
-    width: 14px;
-    height: 14px;
+    width: 18px;
+    height: 18px;
     background-color: currentColor;
     -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><polygon points='3,1 3,11 10,6'/></svg>") no-repeat center / contain;
             mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><polygon points='3,1 3,11 10,6'/></svg>") no-repeat center / contain;
 }
 .orp-play-btn-inline:hover {
-    background: var(--orp-accent);
-    color: var(--orp-bg);
+    background: var(--orp-btn-bg-hover);
+    color: #fff;
 }
 .orp-play-btn-inline:active {
     transform: scale(0.95);
 }
+/* Playing state — reggae green, NOT the orange/gold accent. The colour
+   shift makes "currently playing" unambiguous against the grey idle state. */
 .orp-play-btn-inline.orp-playing {
-    background: var(--orp-accent);
-    color: var(--orp-bg);
+    background: var(--orp-playing-bg);
+    color: #fff;
+}
+.orp-play-btn-inline.orp-playing:hover {
+    background: var(--orp-playing-bg-hover);
 }
 .orp-play-btn-inline.orp-playing::before {
+    width: 18px;
+    height: 18px;
     -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><rect x='1.5' y='1' width='3' height='10'/><rect x='7.5' y='1' width='3' height='10'/></svg>") no-repeat center / contain;
             mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><rect x='1.5' y='1' width='3' height='10'/><rect x='7.5' y='1' width='3' height='10'/></svg>") no-repeat center / contain;
 }

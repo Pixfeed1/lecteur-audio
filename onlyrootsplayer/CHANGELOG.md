@@ -3,6 +3,49 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] — 2026-04-27
+
+### Changed
+
+- **Inline "Listen" button restyled to match the ZOneTheme cart button.** The
+  defaults shipped in `views/css/player.css` now reproduce the visual the
+  client validated on OnlyRoots Reggae:
+  - `--orp-btn-size: 42px` (was 38px) — same square as the cart button
+  - `--orp-btn-bg: #a3a2a2` (new var) — neutral grey idle background
+  - `--orp-btn-bg-hover: #868686` (new var)
+  - `--orp-btn-radius: 6px` (unchanged)
+  - 1 px translucent white border + soft drop shadow — identical chrome to
+    the theme's cart button
+  - Inner icon bumped from 14×14 to **18×18 px** (both play and pause)
+- **"Now playing" state** now uses a dedicated reggae green
+  (`--orp-playing-bg: #3f6e51`, `--orp-playing-bg-hover: #335a42`) instead of
+  the orange/gold accent. Makes the playing state unambiguous against the
+  grey idle state, and keeps the orange accent reserved for the footer
+  player chrome.
+
+### Theme-portability note
+
+The new defaults target ZOneTheme. Every value is exposed as a `:root` CSS
+variable, so any other theme can override the look without editing module
+files — drop something like this in a theme stylesheet:
+
+```css
+:root {
+    --orp-btn-bg: #000;
+    --orp-btn-bg-hover: #333;
+    --orp-playing-bg: #c00;
+    --orp-btn-size: 38px;
+}
+```
+
+A header comment block at the top of `player.css` documents this.
+
+### Backwards compatibility
+
+Pure CSS change. No PHP, JS, hook, config-key or template change. Existing
+2.1.0 installs upgrade in place; the only visible difference is the inline
+button rendering.
+
 ## [2.1.0] — 2026-04-25
 
 ### Added
