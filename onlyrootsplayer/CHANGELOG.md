@@ -3,6 +3,33 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.2] — 2026-04-27
+
+### Fixed
+
+- **BO configuration page now displays in French unconditionally.** v2.1.0
+  migrated all user-facing strings to English source keys with French XLF
+  translations under `translations/fr-FR/`. On some PrestaShop installs the
+  XLF cache failed to refresh after the module install, leaving the BO page
+  in English on a French shop. The strings have been reverted to French
+  source so display is independent of the XLF loader.
+
+### Removed
+
+- `translations/fr-FR/ModulesOnlyrootsplayerAdmin.xlf`
+- `translations/fr-FR/ModulesOnlyrootsplayerShop.xlf`
+- The `translations/` directory (now obsolete since FR is the source).
+
+### Note for future English support
+
+If an English target is needed later, create
+`translations/en-US/ModulesOnlyrootsplayerAdmin.xlf` and
+`ModulesOnlyrootsplayerShop.xlf` with `source-language="fr-FR"` and
+`target-language="en-US"`, mapping the French source strings used in
+`onlyrootsplayer.php` and `views/templates/hook/player-footer.tpl` to
+their English equivalents. The `Modules.Onlyrootsplayer.{Admin,Shop}`
+translation domains are preserved so the wiring already works.
+
 ## [2.2.1] — 2026-04-27
 
 ### Fixed

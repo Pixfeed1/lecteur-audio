@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.2.1
+ * @version   2.2.2
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -50,7 +50,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.2.1';
+        $this->version          = '2.2.2';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -59,17 +59,17 @@ class OnlyRootsPlayer extends Module
         parent::__construct();
 
         $this->displayName      = $this->trans(
-            'OnlyRoots — Persistent audio player',
+            'OnlyRoots — Lecteur audio persistant',
             [],
             'Modules.Onlyrootsplayer.Admin'
         );
         $this->description      = $this->trans(
-            'Persistent cross-page audio player with optional SPA navigation. Theme-agnostic for PrestaShop 8 via configurable selectors.',
+            'Lecteur audio persistant cross-pages avec navigation SPA optionnelle. Compatible avec n\'importe quel thème PrestaShop 8 via sélecteurs configurables.',
             [],
             'Modules.Onlyrootsplayer.Admin'
         );
         $this->confirmUninstall = $this->trans(
-            'Uninstall OnlyRoots Player and remove all of its configuration?',
+            'Désinstaller OnlyRoots Player et supprimer toute sa configuration ?',
             [],
             'Modules.Onlyrootsplayer.Admin'
         );
@@ -86,7 +86,7 @@ class OnlyRootsPlayer extends Module
         if (!self::audioSourceAvailable()) {
             $this->_errors[] = sprintf(
                 $this->trans(
-                    'This module requires the "%s" module to be installed and active.',
+                    'Ce module nécessite que le module « %s » soit installé et actif.',
                     [self::AUDIO_SOURCE_MODULE],
                     'Modules.Onlyrootsplayer.Admin'
                 ),
@@ -181,7 +181,7 @@ class OnlyRootsPlayer extends Module
         if (!self::audioSourceAvailable()) {
             $output .= $this->displayWarning(
                 $this->trans(
-                    'The audio source module "%s" is not installed or its database table is missing. The player will not display anywhere until that module is active.',
+                    'Le module source audio « %s » n\'est pas installé ou sa table de base de données est manquante. Le lecteur ne s\'affichera nulle part tant que ce module ne sera pas actif.',
                     [self::AUDIO_SOURCE_MODULE],
                     'Modules.Onlyrootsplayer.Admin'
                 )
@@ -230,7 +230,7 @@ class OnlyRootsPlayer extends Module
         }
 
         return $this->displayConfirmation(
-            $this->trans('Settings saved.', [], 'Modules.Onlyrootsplayer.Admin')
+            $this->trans('Paramètres enregistrés.', [], 'Modules.Onlyrootsplayer.Admin')
         );
     }
 
@@ -251,109 +251,109 @@ class OnlyRootsPlayer extends Module
                     'icon'  => 'icon-cogs',
                 ],
                 'description' => $this->tAdmin(
-                    'All theme-dependent selectors are configurable below. Start with the defaults; only change them if your theme uses different DOM markup.'
+                    'Tous les sélecteurs dépendants du thème sont configurables ci-dessous. Utilisez d\'abord les valeurs par défaut ; ne les modifiez que si votre thème utilise un balisage DOM différent.'
                 ),
                 'input' => [
                     [
                         'type'    => 'switch',
-                        'label'   => $this->tAdmin('Enable SPA navigation (Swup)'),
+                        'label'   => $this->tAdmin('Activer la navigation SPA (Swup)'),
                         'name'    => self::CFG_SWUP_ENABLED,
-                        'desc'    => $this->tAdmin('When enabled, page transitions happen via fetch + DOM replacement, keeping audio playing across navigations. If your theme is incompatible, disable this option — the player still works in standalone mode via localStorage.'),
+                        'desc'    => $this->tAdmin('Quand activé, les transitions entre pages se font via fetch + remplacement DOM, en gardant l\'audio en lecture pendant les navigations. Si votre thème est incompatible, désactivez cette option — le lecteur continue de fonctionner en mode autonome via localStorage.'),
                         'is_bool' => true,
                         'values'  => [
-                            ['id' => 'swup_on',  'value' => 1, 'label' => $this->tAdmin('Enabled')],
-                            ['id' => 'swup_off', 'value' => 0, 'label' => $this->tAdmin('Disabled')],
+                            ['id' => 'swup_on',  'value' => 1, 'label' => $this->tAdmin('Activé')],
+                            ['id' => 'swup_off', 'value' => 0, 'label' => $this->tAdmin('Désactivé')],
                         ],
                     ],
                     [
                         'type'  => 'text',
-                        'label' => $this->tAdmin('Swup container selector(s)'),
+                        'label' => $this->tAdmin('Sélecteur(s) du conteneur Swup'),
                         'name'  => self::CFG_SWUP_CONTAINER,
                         'desc'  => $this->tAdmin(
-                            'CSS selector(s) for the main content area to swap during navigation. Multiple comma-separated selectors act as fallbacks (first one that matches and contains a product card wins). Default: %selectors%',
+                            'Sélecteur(s) CSS de la zone de contenu principale à remplacer pendant la navigation. Plusieurs sélecteurs séparés par des virgules servent de fallback (le premier qui matche ET qui contient une fiche produit gagne). Défaut : %selectors%',
                             ['%selectors%' => self::DEFAULT_CONTAINER]
                         ),
                         'class' => 'fixed-width-xxl',
                     ],
                     [
                         'type'  => 'text',
-                        'label' => $this->tAdmin('Product card selector(s)'),
+                        'label' => $this->tAdmin('Sélecteur(s) des fiches produit'),
                         'name'  => self::CFG_PRODUCT_SELECTORS,
                         'desc'  => $this->tAdmin(
-                            'CSS selector(s) used to find product cards on listings, where the play buttons are injected. The element must carry a [data-id-product] attribute. Default: %selectors%',
+                            'Sélecteur(s) CSS utilisés pour trouver les fiches produit sur les listings, où sont injectés les boutons play. L\'élément doit porter un attribut [data-id-product]. Défaut : %selectors%',
                             ['%selectors%' => self::DEFAULT_PRODUCT_SELECTORS]
                         ),
                         'class' => 'fixed-width-xxl',
                     ],
                     [
                         'type'  => 'text',
-                        'label' => $this->tAdmin('Play button anchor selector(s)'),
+                        'label' => $this->tAdmin('Sélecteur(s) d\'ancrage du bouton play'),
                         'name'  => self::CFG_BUTTON_ANCHOR,
                         'desc'  => $this->tAdmin(
-                            'Inside each product card, where to insert the inline play button (next to the cart button). Multiple comma-separated selectors are tried in order; the first match wins per card. If no anchor matches, the module falls back to an overlay button on the product image. Default: %selectors%',
+                            'Dans chaque fiche produit, où placer le bouton play inline (à côté du bouton panier). Plusieurs sélecteurs séparés par des virgules sont testés dans l\'ordre ; le premier qui matche gagne pour chaque fiche. Si aucun ancrage n\'est trouvé, le module retombe en fallback sur un bouton en overlay sur l\'image produit. Défaut : %selectors%',
                             ['%selectors%' => self::DEFAULT_BUTTON_ANCHOR]
                         ),
                         'class' => 'fixed-width-xxl',
                     ],
                     [
                         'type'    => 'switch',
-                        'label'   => $this->tAdmin('Preload links on hover (Swup)'),
+                        'label'   => $this->tAdmin('Précharger les liens au survol (Swup)'),
                         'name'    => self::CFG_SWUP_PRELOAD,
-                        'desc'    => $this->tAdmin('Speeds up perceived navigation by preloading pages when the user hovers a link. Slightly increases server load.'),
+                        'desc'    => $this->tAdmin('Accélère la navigation perçue en préchargeant les pages quand l\'utilisateur survole un lien. Augmente légèrement la charge serveur.'),
                         'is_bool' => true,
                         'values'  => [
-                            ['id' => 'preload_on',  'value' => 1, 'label' => $this->tAdmin('Enabled')],
-                            ['id' => 'preload_off', 'value' => 0, 'label' => $this->tAdmin('Disabled')],
+                            ['id' => 'preload_on',  'value' => 1, 'label' => $this->tAdmin('Activé')],
+                            ['id' => 'preload_off', 'value' => 0, 'label' => $this->tAdmin('Désactivé')],
                         ],
                     ],
                     [
                         'type'  => 'text',
-                        'label' => $this->tAdmin('Swap watchdog timeout (ms)'),
+                        'label' => $this->tAdmin('Délai du watchdog de swap (ms)'),
                         'name'  => self::CFG_WATCHDOG_MS,
                         'desc'  => $this->tAdmin(
-                            'After this timeout (in milliseconds), if a Swup swap has updated the URL but not the content, the module forces a full reload. The runtime adapts this value upwards (capped at %max% ms) for slow shops based on the first successful swap. Default: %default% ms.',
+                            'Au-delà de ce délai (en millisecondes), si un swap Swup a changé l\'URL mais pas le contenu, le module force un rechargement complet. Le runtime ajuste cette valeur à la hausse (plafonnée à %max% ms) pour les boutiques lentes en fonction du premier swap réussi. Défaut : %default% ms.',
                             ['%default%' => (string) self::DEFAULT_WATCHDOG_MS, '%max%' => (string) self::WATCHDOG_MAX_MS]
                         ),
                         'class' => 'fixed-width-md',
                     ],
                     [
                         'type'  => 'textarea',
-                        'label' => $this->tAdmin('IP whitelist (preview mode)'),
+                        'label' => $this->tAdmin('Whitelist d\'IPs (mode preview)'),
                         'name'  => self::CFG_SWUP_IP_WHITELIST,
-                        'desc'  => $this->tAdmin('If filled, Swup is enabled only for these IPs (IPv4 CIDR supported, comma- or newline-separated). Useful to test SPA navigation in production for staff only. Leave empty to enable Swup for everyone.'),
+                        'desc'  => $this->tAdmin('Si rempli, Swup n\'est activé que pour ces IPs (CIDR IPv4 supporté, séparées par virgules ou retours à la ligne). Utile pour tester la navigation SPA en production pour le staff uniquement. Laissez vide pour activer Swup pour tout le monde.'),
                         'cols'  => 60,
                         'rows'  => 3,
                     ],
                     [
                         'type'  => 'textarea',
-                        'label' => $this->tAdmin('Additional URL exclusion patterns'),
+                        'label' => $this->tAdmin('Motifs d\'exclusion d\'URL supplémentaires'),
                         'name'  => self::CFG_EXTRA_EXCLUDES,
-                        'desc'  => $this->tAdmin('One pattern per line. URLs containing any of these patterns bypass Swup and trigger a full page reload. Standard PrestaShop pages (cart, order, login, my account, etc.) are already excluded automatically — list only additional paths here.'),
+                        'desc'  => $this->tAdmin('Un motif par ligne. Les URLs contenant l\'un de ces motifs court-circuitent Swup et déclenchent un rechargement complet de la page. Les pages PrestaShop standard (panier, commande, connexion, mon compte, etc.) sont déjà exclues automatiquement — listez ici uniquement les chemins additionnels.'),
                         'cols'  => 60,
                         'rows'  => 4,
                     ],
                     [
                         'type'    => 'switch',
-                        'label'   => $this->tAdmin('Debug mode'),
+                        'label'   => $this->tAdmin('Mode debug'),
                         'name'    => self::CFG_DEBUG_ENABLED,
-                        'desc'    => $this->tAdmin('Logs detailed events to the browser console (no server-side logging). Disable in production.'),
+                        'desc'    => $this->tAdmin('Logge les événements détaillés dans la console du navigateur (aucun log côté serveur). À désactiver en production.'),
                         'is_bool' => true,
                         'values'  => [
-                            ['id' => 'debug_on',  'value' => 1, 'label' => $this->tAdmin('Enabled')],
-                            ['id' => 'debug_off', 'value' => 0, 'label' => $this->tAdmin('Disabled')],
+                            ['id' => 'debug_on',  'value' => 1, 'label' => $this->tAdmin('Activé')],
+                            ['id' => 'debug_off', 'value' => 0, 'label' => $this->tAdmin('Désactivé')],
                         ],
                     ],
                     [
                         'type'  => 'textarea',
-                        'label' => $this->tAdmin('Custom JS after Swup swap'),
+                        'label' => $this->tAdmin('JS personnalisé après swap Swup'),
                         'name'  => self::CFG_POST_SWAP_JS,
-                        'desc'  => $this->tAdmin('JS executed after each successful Swup swap. Use this to re-initialize theme-specific modules (megamenu, sticky header, swipers, etc.). Runs in the global scope.'),
+                        'desc'  => $this->tAdmin('JS exécuté après chaque swap Swup réussi. À utiliser pour réinitialiser les modules spécifiques au thème (mégamenu, header sticky, swipers, etc.). S\'exécute dans la portée globale.'),
                         'cols'  => 80,
                         'rows'  => 8,
                     ],
                 ],
                 'submit' => [
-                    'title' => $this->tAdmin('Save'),
+                    'title' => $this->tAdmin('Enregistrer'),
                     'name'  => 'submitOrpConfig',
                     'class' => 'btn btn-default pull-right',
                 ],
@@ -488,11 +488,11 @@ class OnlyRootsPlayer extends Module
                 'debug'            => $debug,
             ],
             'onlyrootsPlayerL10n' => [
-                'listenSample'  => $this->trans('Listen to a sample', [], 'Modules.Onlyrootsplayer.Shop'),
-                'listen'        => $this->trans('Listen', [], 'Modules.Onlyrootsplayer.Shop'),
+                'listenSample'  => $this->trans('Écouter un extrait', [], 'Modules.Onlyrootsplayer.Shop'),
+                'listen'        => $this->trans('Écouter', [], 'Modules.Onlyrootsplayer.Shop'),
                 'pause'         => $this->trans('Pause', [], 'Modules.Onlyrootsplayer.Shop'),
-                'openInPlayer'  => $this->trans('Open in player', [], 'Modules.Onlyrootsplayer.Shop'),
-                'openPlaylist'  => $this->trans('Open this playlist in the persistent player', [], 'Modules.Onlyrootsplayer.Shop'),
+                'openInPlayer'  => $this->trans('Ouvrir dans le lecteur', [], 'Modules.Onlyrootsplayer.Shop'),
+                'openPlaylist'  => $this->trans('Ouvrir cette playlist dans le lecteur persistant', [], 'Modules.Onlyrootsplayer.Shop'),
             ],
         ]);
     }
