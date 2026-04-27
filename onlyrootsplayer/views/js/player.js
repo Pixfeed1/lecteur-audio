@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.4.1
+ * OnlyRoots Persistent Audio Player — v2.4.2
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.4.1
+ * @version   2.4.2
  */
 (function () {
     'use strict';

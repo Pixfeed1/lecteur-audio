@@ -3,6 +3,103 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.2] — 2026-04-27
+
+Calibrated against the actual ZOneTheme v2.7.3 source archive (provided
+by the operator on `main`). The v2.4.1 monitor log proved beyond doubt
+that ZOneTheme's `_dev/js/aone/*.js` modules are bundled via webpack —
+each module wraps top-level function declarations in its own IIFE, so
+none of `stickyHeader`, `mobileToggleEvent`, `setCurrentMenuItem`,
+`productHomeFeatured` etc. ever reach `window`. All 17 attempted name
+matches came back `fnsMissing` with `slickInit=0`.
+
+### Replaced — `views/js/themes/zonetheme.js` rewritten end-to-end
+
+The preset no longer tries to call ZOneTheme functions by name. Instead,
+it re-implements their bodies directly, using the same selectors and
+same data attributes ZOneTheme uses. Verified against the unminified
+sources in the operator-provided archive.
+
+#### Sliders (4 ZOneTheme types now re-initialised)
+
+- **`#aoneSlider`** (NivoSlider). Reads `data-settings`, calls
+  `$.fn.nivoSlider({...})` with the full option set from
+  `_aoneslideshow.js`.
+- **`.js-home-block-slider`** (Slick — "Derniers arrivages",
+  "Nouveautés", "Onlyroots Records"). Reads `data-slickoptions`, calls
+  `$.fn.slick({...})` with all the responsive breakpoints from
+  `_aonehomeblocks.js`. Re-binds the `beforeChange → appear` lazy-image
+  trigger on each slider.
+- **`.js-brand-logo-slider`** (Slick). Hardcoded breakpoints from
+  `_aonebrandlogo.js`, `data-autoscroll` for the autoplay flag, RTL
+  detected from `prestashop.language.is_rtl`.
+- **`.js-featured-categories-slider`** (Slick). `data-slidestoshow`
+  drives the responsive options from `_aonefeaturedcategories.js`.
+
+All four are idempotent: the Slick ones use `:not(.slick-initialized)`,
+and NivoSlider checks the `nivoslider` data flag and the auto-added
+`.nivoSlider` class.
+
+#### Bootstrap tab → slick setPosition
+
+`a[data-bs-toggle="tab"]` listener re-bound on every preset run,
+namespaced as `shown.bs.tab.orpZoneTheme` so the previous binding is
+removed before the new one is attached (no listener doubling). Inside
+the shown tab we trigger `slick('setPosition')` so a slider that was
+created in a hidden panel measures itself correctly.
+
+#### Sticky header
+
+`reinitStickyHeader()` calls `$.fn.sticky` on
+`.desktop-header-version [data-sticky-menu]` and
+`.mobile-header-version [data-mobile-sticky]` with the wrapper class
+names ZOneTheme expects. Sticky-cart preview is repopulated from
+`[data-header-cart-source]`.
+
+#### Megamenu
+
+- `rebindMobileMegamenu`: click toggle on
+  `#mobile-amegamenu .amenu-item.plex > .amenu-link`, slide-toggle the
+  `.adropdown` sibling, manage the `expanded` class.
+- `rebindTabletHoverMegamenu`: touchstart handlers on `<html>`,
+  `#amegamenu`, and `#amegamenu .amenu-item.plex > .amenu-link`.
+- `markCurrentMenuItem`: reads `window.varBreadcrumbLinks` and adds
+  `curr-menu` class on the matching menu item.
+
+#### Sidebars (left nav + cart preview)
+
+`rebindSidebars` re-installs `[data-left-nav-trigger]`,
+`[data-close-st-menu]`, `[data-sidebar-cart-trigger]`,
+`[data-close-st-cart]` click handlers, gated by `[data-st-menu]` and
+`[data-st-cart]` presence respectively.
+
+#### Scroll-to-top
+
+`rebindScrollToTop` re-binds the click handler on
+`[data-scroll-to-top] a` to `$.smoothScroll` (with a vanilla `animate`
+fallback if smoothScroll isn't available).
+
+### Telemetry
+
+The `orp:preset:invoked` event now reports per-component counts:
+`aoneSlider`, `homeBlockSliders`, `brandSliders`, `featuredSliders`,
+`stickyHeader`, `rtl`. If any go to 0 unexpectedly after a future
+ZOneTheme update, the operator (and we) immediately see which selector
+broke.
+
+### Removed
+
+- The dead-end `REINIT_FUNCTIONS` list (17 names that were always
+  missing from `window` because of webpack scoping).
+- The generic `reinitSliders` that probed `[data-slick]` /
+  `.slick-slider` / `.owl-carousel` / `.swiper` selectors none of
+  which ZOneTheme uses.
+
+### Backwards compatibility
+
+No breaking change. Operators on the `zonetheme` preset get a
+substantially better experience. Operators on `none` see no change.
+
 ## [2.4.1] — 2026-04-27
 
 First fix iteration informed by real diagnostic data captured via the
