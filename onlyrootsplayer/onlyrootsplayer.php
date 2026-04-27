@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.1.1
+ * @version   2.2.0
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -36,6 +36,7 @@ class OnlyRootsPlayer extends Module
     const CFG_BUTTON_ANCHOR     = 'ORP_BUTTON_ANCHOR';
     const CFG_EXTRA_EXCLUDES    = 'ORP_EXTRA_EXCLUDES';
     const CFG_WATCHDOG_MS       = 'ORP_WATCHDOG_MS';
+    const CFG_POST_SWAP_JS      = 'ORP_POST_SWAP_JS';
 
     /* Defaults — written on install, restorable from BO */
     const DEFAULT_CONTAINER         = '#content-wrapper, #content, main, #main';
@@ -49,7 +50,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.1.1';
+        $this->version          = '2.2.0';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -104,6 +105,7 @@ class OnlyRootsPlayer extends Module
             self::CFG_BUTTON_ANCHOR     => self::DEFAULT_BUTTON_ANCHOR,
             self::CFG_EXTRA_EXCLUDES    => '',
             self::CFG_WATCHDOG_MS       => self::DEFAULT_WATCHDOG_MS,
+            self::CFG_POST_SWAP_JS      => '',
         ];
         // updateValue is an upsert — existing 2.0.0 installs keep their values,
         // only the new keys (e.g. WATCHDOG_MS) get the default written.
@@ -135,6 +137,7 @@ class OnlyRootsPlayer extends Module
             self::CFG_BUTTON_ANCHOR,
             self::CFG_EXTRA_EXCLUDES,
             self::CFG_WATCHDOG_MS,
+            self::CFG_POST_SWAP_JS,
         ];
         foreach ($keys as $k) {
             Configuration::deleteByName($k);
@@ -205,6 +208,10 @@ class OnlyRootsPlayer extends Module
             self::CFG_BUTTON_ANCHOR     => trim((string) Tools::getValue(self::CFG_BUTTON_ANCHOR)),
             self::CFG_EXTRA_EXCLUDES    => trim((string) Tools::getValue(self::CFG_EXTRA_EXCLUDES)),
             self::CFG_WATCHDOG_MS       => $watchdog,
+            // No trim — preserve indentation/blank lines so the operator's JS
+            // remains formatted as authored. Tools::getValue strips slashes
+            // already so we only cast to string here.
+            self::CFG_POST_SWAP_JS      => (string) Tools::getValue(self::CFG_POST_SWAP_JS),
         ];
 
         // Restore defaults on empty fields rather than letting the front break
@@ -336,6 +343,14 @@ class OnlyRootsPlayer extends Module
                             ['id' => 'debug_off', 'value' => 0, 'label' => $this->tAdmin('Disabled')],
                         ],
                     ],
+                    [
+                        'type'  => 'textarea',
+                        'label' => $this->tAdmin('Custom JS after Swup swap'),
+                        'name'  => self::CFG_POST_SWAP_JS,
+                        'desc'  => $this->tAdmin('JS executed after each successful Swup swap. Use this to re-initialize theme-specific modules (megamenu, sticky header, swipers, etc.). Runs in the global scope.'),
+                        'cols'  => 80,
+                        'rows'  => 8,
+                    ],
                 ],
                 'submit' => [
                     'title' => $this->tAdmin('Save'),
@@ -377,6 +392,7 @@ class OnlyRootsPlayer extends Module
             self::CFG_BUTTON_ANCHOR     => Configuration::get(self::CFG_BUTTON_ANCHOR),
             self::CFG_EXTRA_EXCLUDES    => Configuration::get(self::CFG_EXTRA_EXCLUDES),
             self::CFG_WATCHDOG_MS       => $this->getWatchdogMs(),
+            self::CFG_POST_SWAP_JS      => (string) Configuration::get(self::CFG_POST_SWAP_JS),
         ];
     }
 
@@ -468,6 +484,7 @@ class OnlyRootsPlayer extends Module
                 'buttonAnchor'     => $buttonAnchor,
                 'watchdogMs'       => $this->getWatchdogMs(),
                 'watchdogMaxMs'    => self::WATCHDOG_MAX_MS,
+                'postSwapJs'       => (string) Configuration::get(self::CFG_POST_SWAP_JS),
                 'debug'            => $debug,
             ],
             'onlyrootsPlayerL10n' => [

@@ -121,6 +121,14 @@
         <source>Save</source>
         <target>Enregistrer</target>
       </trans-unit>
+      <trans-unit id="30" resname="Custom JS after Swup swap">
+        <source>Custom JS after Swup swap</source>
+        <target>JS personnalisé après swap Swup</target>
+      </trans-unit>
+      <trans-unit id="31" resname="JS executed after each successful Swup swap. Use this to re-initialize theme-specific modules (megamenu, sticky header, swipers, etc.). Runs in the global scope.">
+        <source>JS executed after each successful Swup swap. Use this to re-initialize theme-specific modules (megamenu, sticky header, swipers, etc.). Runs in the global scope.</source>
+        <target>JS exécuté après chaque swap Swup réussi. À utiliser pour réinitialiser les modules spécifiques au thème (mégamenu, header sticky, swipers, etc.). S'exécute dans la portée globale.</target>
+      </trans-unit>
     </body>
   </file>
 </xliff>

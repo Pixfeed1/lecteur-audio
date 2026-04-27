@@ -3,6 +3,37 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] — 2026-04-27
+
+### Added
+
+- **"Custom JS after Swup swap" hook (`ORP_POST_SWAP_JS`).** A new BO textarea
+  (`Modules → OnlyRoots Player → Configure → Custom JS after Swup swap`)
+  accepts an arbitrary JS snippet that runs after every successful SPA swap.
+  Designed for theme-specific reinit code that doesn't survive a fetch + DOM
+  replace — megamenus, sticky headers, swipers, accordions, etc. The snippet
+  executes via `new Function(code).call(window)` (no eval, no closure leak,
+  full access to globals like `jQuery`, `prestashop`, `Swiper`) and is
+  wrapped in a try/catch that logs to `console.warn` so a buggy snippet
+  cannot break the player.
+  *Files:* `onlyrootsplayer.php` (constant, install/uninstall, postProcess,
+  BO field, header config exposure), `views/js/player.js` (`runPostSwapJs`
+  helper called inside the `content:replace` hook).
+
+### Notes
+
+- The hook executes **before** the adaptive watchdog measurement block, so
+  the runtime of operator-supplied reinit work is included in the swap
+  duration. Themes that need a slow reinit get a proportionally larger
+  watchdog window (capped at `--watchdogMaxMs`, default 5000 ms).
+- New admin XLF trans-units: `Custom JS after Swup swap` + its description.
+
+### Backwards compatibility
+
+No breaking change. Existing 2.1.x installs upgrade in place; the new config
+key `ORP_POST_SWAP_JS` defaults to an empty string, so behaviour is
+identical until an operator pastes a snippet into the BO.
+
 ## [2.1.1] — 2026-04-27
 
 ### Changed
