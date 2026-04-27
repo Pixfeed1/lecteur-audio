@@ -3,6 +3,33 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] — 2026-04-27
+
+### Fixed
+
+- **`prestashop.emit('updatedProduct', {})` removed from the `content:replace`
+  hook.** Several third-party modules subscribe to that event and crash when
+  the payload is empty (they expect a `reason` field and dereference it
+  without a guard). On a Swup navigation we have no relevant payload to
+  emit, so the call is dropped entirely.
+
+### Changed
+
+- **`updatedProductList` now emits a `reason` payload.** The single emit on
+  `content:replace` now passes `{ reason: 'orp:swup-navigation' }` so listeners
+  can distinguish a SPA navigation from an in-page faceted-search update.
+- **`runPostSwapJs()` helper inlined** into the `content:replace` hook to
+  match the canonical implementation. Behaviour is unchanged: still uses
+  `new Function(CONFIG.postSwapJs)()`, still wrapped in try/catch with a
+  `console.warn` on failure.
+
+### Backwards compatibility
+
+No breaking change. The dropped `updatedProduct` emit only ever fired with
+an empty payload, which was useless to consumers; modules that were already
+crashing on it are now fixed. Modules that listened legitimately would have
+received `{}` and learned nothing actionable.
+
 ## [2.2.0] — 2026-04-27
 
 ### Added

@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.2.0
+ * OnlyRoots Persistent Audio Player — v2.2.1
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.2.0
+ * @version   2.2.1
  */
 (function () {
     'use strict';
@@ -949,36 +949,6 @@
         return 1500;
     }
 
-    /**
-     * Executes the operator-supplied "post-swap JS" snippet after every
-     * successful Swup swap. Used to re-initialise theme-specific modules
-     * (megamenus, sticky headers, swipers, etc.) that don't survive a
-     * fetch + DOM replace by themselves.
-     *
-     * Runs in the global scope (via the Function constructor — not eval, so
-     * no local closure leak) and is fully sandboxed in try/catch: a syntax
-     * error or a runtime exception in the operator's snippet must never
-     * break the player itself.
-     *
-     * Source of trust: the snippet comes from the BO config, which is only
-     * editable by store admins. We treat it as already-trusted code.
-     */
-    function runPostSwapJs() {
-        var code = CONFIG.postSwapJs;
-        if (!code || typeof code !== 'string') return;
-        if (!code.replace(/\s+/g, '').length) return; // whitespace-only
-
-        try {
-            // Function() body executes with the global object as `this`,
-            // so jQuery, prestashop, theme globals are all reachable.
-            (new Function(code)).call(window);
-        } catch (err) {
-            try {
-                console.warn('[ORP] post-swap JS threw:', err);
-            } catch (e) {}
-        }
-    }
-
     function bindSwupHooks() {
         if (!swupInstance) return;
 
@@ -1035,17 +1005,27 @@
             scheduleInject();
             try {
                 if (typeof window.prestashop !== 'undefined' && typeof window.prestashop.emit === 'function') {
-                    window.prestashop.emit('updatedProductList', {});
-                    window.prestashop.emit('updatedProduct', {});
+                    // The `reason` payload is mandatory for some third-party
+                    // modules that read it to decide whether to re-bind their
+                    // listeners. Emitting `updatedProduct` here was also
+                    // dropped: it crashed listeners that expect a populated
+                    // event payload (we have none on a SPA navigation).
+                    window.prestashop.emit('updatedProductList', { reason: 'orp:swup-navigation' });
                 }
             } catch (e) {}
             initProductPage();
 
-            // Operator-supplied post-swap script (theme-specific reinit). Runs
-            // BEFORE the watchdog adaptation block so the script's runtime is
-            // included in the measured swap duration — themes that need slow
-            // reinit work get a proportionally larger watchdog window.
-            runPostSwapJs();
+            // Custom JS hook (theme reinit code injected by admin via BO).
+            // Runs BEFORE the watchdog adaptation so the snippet's runtime is
+            // included in the measured swap duration — slow reinit themes
+            // automatically get a proportionally larger watchdog window.
+            if (CONFIG.postSwapJs) {
+                try {
+                    new Function(CONFIG.postSwapJs)();
+                } catch (e) {
+                    try { console.warn('[ORP] postSwapJs error:', e); } catch (err) {}
+                }
+            }
 
             // Adaptive watchdog: measure the actual swap duration and, if it
             // was slow (> 1s), bump the watchdog timeout for subsequent visits
