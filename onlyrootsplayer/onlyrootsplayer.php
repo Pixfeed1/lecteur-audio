@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.3.0
+ * @version   2.3.1
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -58,7 +58,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.3.0';
+        $this->version          = '2.3.1';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -114,9 +114,11 @@ class OnlyRootsPlayer extends Module
             self::CFG_EXTRA_EXCLUDES    => '',
             self::CFG_WATCHDOG_MS       => self::DEFAULT_WATCHDOG_MS,
             self::CFG_POST_SWAP_JS      => '',
-            // Default 'none' to preserve theme-agnostic behaviour on upgrades.
-            // Operators on ZOneTheme deployments switch to 'zonetheme' via BO.
-            self::CFG_THEME_PRESET      => self::THEME_PRESET_NONE,
+            // Default 'zonetheme' since this module is shipped specifically
+            // for the OnlyRoots Reggae shop running on ZOneTheme. Operators
+            // deploying on a different theme switch to 'none' (or another
+            // preset) via BO.
+            self::CFG_THEME_PRESET      => self::THEME_PRESET_ZONETHEME,
         ];
         // updateValue is an upsert — existing 2.0.0 installs keep their values,
         // only the new keys (e.g. WATCHDOG_MS) get the default written.

@@ -2,7 +2,7 @@
 <module>
     <name>onlyrootsplayer</name>
     <displayName><![CDATA[OnlyRoots Persistent Audio Player]]></displayName>
-    <version><![CDATA[2.3.0]]></version>
+    <version><![CDATA[2.3.1]]></version>
     <description><![CDATA[Persistent cross-page audio player with optional SPA navigation. Theme-agnostic, configurable selectors.]]></description>
     <author><![CDATA[PixFeed]]></author>
     <tab><![CDATA[front_office_features]]></tab>

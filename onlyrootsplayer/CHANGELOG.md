@@ -3,6 +3,21 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-04-27
+
+### Changed
+- Default theme preset is now `zonetheme` instead of `none`. The module is
+  shipped primarily for OnlyRoots Reggae (ZOneTheme), so the most common
+  installation no longer requires a manual BO configuration step. Operators
+  on a different theme can switch back to `none` (or another preset) via
+  the BO configuration panel as before.
+
+### Migration notes
+- Fresh installations: ZOneTheme reinit kicks in automatically.
+- Existing 2.3.0 installations: the previously stored value is preserved
+  (the install upsert only writes defaults for missing keys), so no surprise
+  for production sites already configured.
+
 ## [2.3.0] — 2026-04-27
 
 ### Added
