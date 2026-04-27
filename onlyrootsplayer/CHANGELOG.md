@@ -3,6 +3,70 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1] — 2026-04-27
+
+First fix iteration informed by real diagnostic data captured via the
+v2.4.0 monitor on OnlyRoots Reggae production. The monitor log showed:
+sliders going from 7 (initial) to 0 (after Swup return), sticky-wrapper
+count dropping from 1 to 0 on every swap, and `country-fr lang-fr
+currency-eur` body classes being wiped on category page navigations.
+
+### Fixed
+
+- **Sliders not re-initialised after Swup return.** The ZOneTheme preset
+  now ships a generic slider re-init step (`reinitSliders`) that probes
+  Slick (`$.fn.slick`), Owl Carousel (`$.fn.owlCarousel`) and Swiper
+  (`window.Swiper`), and re-initialises any slider element that lost its
+  initialised state during the swap. Idempotent — already-initialised
+  carousels are skipped via `slick-initialized` / `owl-loaded` /
+  `element.swiper` guards.
+- **Persistent body classes restored after each Swup swap.** Player core
+  now captures `body` classes matching `^country-`, `^currency-`,
+  `^lang-`, `^is-customer-`, `^no-customer-` at init time, and re-adds
+  any of them missing after `content:replace`. This compensates for
+  `SwupBodyClassPlugin`'s wholesale class replacement combined with
+  category-page templates that omit those globals on ZOneTheme. Likely
+  fix for the "couleurs noir/blanc inversées" symptom.
+
+### Added — preset telemetry
+
+The ZOneTheme preset now reports its own execution to the monitor log:
+which reinit functions were found in `window` (so re-invoked) vs.
+missing (likely renamed in a future ZOneTheme update), how many sliders
+each library re-initialised, and which functions threw. Surfaces as
+`orp:preset:invoked` events in `var/monitor.log`.
+
+When the monitor sees `orp:body-class-restored` events, the operator
+knows the body-class compensation kicked in for that swap.
+
+### Extended ZOneTheme preset reinit list
+
+Added likely slider init function names that ZOneTheme may expose as
+globals: `productHomeFeatured`, `homeSliderTabs`, `lazyloadHomeSliders`,
+`productSlider`, `initSlick`, `initSliders`, `reinitSliders`. Each is
+gated by `typeof === 'function'` so a missing one is a silent no-op
+that surfaces as a `fnsMissing` entry in the next preset:invoked event.
+
+### Backwards compatibility
+
+No breaking change. Same surface area as 2.4.0; this release strictly
+adds reinit code paths and telemetry events.
+
+### How to verify the fixes worked
+
+1. Operate the site with `monitorEnabled = 1` and `themePreset = zonetheme`.
+2. Reproduce the same navigation pattern as the v2.4.0 capture.
+3. The new `var/monitor.log` should show:
+   - `orp:preset:invoked` after every swap, with `slickInit > 0` / `owlInit
+     > 0` / `swiperInit > 0` if sliders were re-initialised.
+   - `dom:diff` should no longer report `sliders: 7 -> 0` losses (the
+     post-swap snapshot reflects the just-re-initialised sliders).
+   - `orp:body-class-restored` whenever the persistent classes had to
+     be re-added — logs which classes each time.
+   - If `fnsMissing` includes a slider-related name, ZOneTheme exposes
+     its slider init under a different identifier; report it back so we
+     can extend the preset.
+
 ## [2.4.0] — 2026-04-27
 
 ### Added — diagnostic monitor

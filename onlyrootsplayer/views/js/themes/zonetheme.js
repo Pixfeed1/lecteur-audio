@@ -38,7 +38,16 @@
         'ajaxLoadDrodownContent',
         'mobileToggleEvent',
         'enableHoverMenuOnTablet',
-        'setCurrentMenuItem'
+        'setCurrentMenuItem',
+        // Likely slider init functions in ZOneTheme. Tried defensively —
+        // typeof guards mean a missing one is a no-op, no error.
+        'productHomeFeatured',
+        'homeSliderTabs',
+        'lazyloadHomeSliders',
+        'productSlider',
+        'initSlick',
+        'initSliders',
+        'reinitSliders'
     ];
 
     function safeWarn() {
@@ -86,31 +95,107 @@
     }
 
     /**
-     * Calls each reinit function by name. Each one is wrapped in its own
-     * try/catch so one buggy theme function doesn't stop the rest.
+     * Calls each reinit function by name. Returns a summary suitable for
+     * the diagnostic monitor: which functions were found and called, and
+     * which were missing. One buggy theme function doesn't stop the rest.
      */
     function reinitThemeComponents() {
+        var found   = [];
+        var missing = [];
+        var threw   = [];
+
         for (var i = 0; i < REINIT_FUNCTIONS.length; i++) {
             var name = REINIT_FUNCTIONS[i];
             var fn   = window[name];
-            if (typeof fn !== 'function') continue;
+            if (typeof fn !== 'function') {
+                missing.push(name);
+                continue;
+            }
 
             try {
                 fn();
+                found.push(name);
             } catch (e) {
+                threw.push(name);
                 safeWarn('[ORP zonetheme] ' + name + ' threw:', e);
             }
         }
+
+        return { found: found, missing: missing, threw: threw };
+    }
+
+    /**
+     * Generic slider re-initialisation. ZOneTheme's specific slider init
+     * functions are often missing from window globals (they're invoked via
+     * jQuery.ready in the theme bundle). After a Swup swap, the new HTML
+     * has slider markup but no library has run on it yet. We probe the
+     * three common libraries and reinitialise any uninitialised carousel.
+     *
+     * Each library is guarded by a typeof check so we never blow up on a
+     * shop that uses Slick but not Owl, or vice versa.
+     */
+    function reinitSliders($) {
+        var counts = { slick: 0, owl: 0, swiper: 0 };
+
+        // Slick: read config from data-slick attribute, skip
+        // already-initialised instances.
+        if ($.fn && typeof $.fn.slick === 'function') {
+            try {
+                $('[data-slick]:not(.slick-initialized), .slick-slider:not(.slick-initialized)').each(function () {
+                    try {
+                        $(this).slick();
+                        counts.slick++;
+                    } catch (e) {
+                        safeWarn('[ORP zonetheme] slick init threw:', e);
+                    }
+                });
+            } catch (e) {
+                safeWarn('[ORP zonetheme] slick scan threw:', e);
+            }
+        }
+
+        // Owl Carousel: same idea, skip already-loaded carousels.
+        if ($.fn && typeof $.fn.owlCarousel === 'function') {
+            try {
+                $('.owl-carousel:not(.owl-loaded)').each(function () {
+                    try {
+                        $(this).owlCarousel();
+                        counts.owl++;
+                    } catch (e) {
+                        safeWarn('[ORP zonetheme] owl init threw:', e);
+                    }
+                });
+            } catch (e) {
+                safeWarn('[ORP zonetheme] owl scan threw:', e);
+            }
+        }
+
+        // Swiper: each container exposes its instance via element.swiper.
+        // Skip elements that already have one.
+        if (typeof window.Swiper === 'function') {
+            try {
+                $('.swiper, .swiper-container').each(function () {
+                    if (!this.swiper) {
+                        try {
+                            new window.Swiper(this);
+                            counts.swiper++;
+                        } catch (e) {
+                            safeWarn('[ORP zonetheme] swiper init threw:', e);
+                        }
+                    }
+                });
+            } catch (e) {
+                safeWarn('[ORP zonetheme] swiper scan threw:', e);
+            }
+        }
+
+        return counts;
     }
 
     window.orpThemePresets.zonetheme = function (context) {
         // Defence in depth: only run when explicitly invoked from the
-        // Swup content:replace hook in player.js. If something else on
-        // the page (a future bug, a third-party module, an admin paste)
-        // ever calls this function, we silently no-op rather than risk
-        // tearing down freshly-attached theme listeners on the initial
-        // page load. The expected call site passes
-        //   { trigger: 'swup-content-replace' }
+        // Swup content:replace hook in player.js. The expected call site
+        // passes { trigger: 'swup-content-replace' }.
         if (!context || context.trigger !== 'swup-content-replace') {
             safeWarn('[ORP zonetheme] preset called outside Swup context, skipping to avoid double-init');
             return;
@@ -123,6 +208,25 @@
         var $ = window.jQuery;
 
         cleanupListeners($);
-        reinitThemeComponents();
+        var fns      = reinitThemeComponents();
+        var sliders  = reinitSliders($);
+
+        // Surface what actually happened so the diagnostic monitor can show
+        // which theme functions are present (and re-attached) vs. missing
+        // — without this, the operator has no way to know whether the
+        // preset actually fixed anything on each swap.
+        if (typeof window.__orpMonitorEnqueue === 'function') {
+            try {
+                window.__orpMonitorEnqueue('orp:preset:invoked', {
+                    preset: 'zonetheme',
+                    fnsFound:   fns.found.join(','),
+                    fnsMissing: fns.missing.join(','),
+                    fnsThrew:   fns.threw.join(','),
+                    slickInit:  sliders.slick,
+                    owlInit:    sliders.owl,
+                    swiperInit: sliders.swiper,
+                });
+            } catch (e) {}
+        }
     };
 })();

@@ -38,6 +38,8 @@ class OnlyrootsplayerMonitorModuleFrontController extends ModuleFrontController
         'js:error',
         'js:unhandled-rejection',
         'orp:preset:error',
+        'orp:preset:invoked',
+        'orp:body-class-restored',
         'dom:diff',
         'dom:snapshot',
         'orp:player:init',

@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.4.0
+ * @version   2.4.1
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -66,7 +66,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.4.0';
+        $this->version          = '2.4.1';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -123,7 +123,7 @@ class OnlyRootsPlayer extends Module
             self::CFG_WATCHDOG_MS       => self::DEFAULT_WATCHDOG_MS,
             self::CFG_POST_SWAP_JS      => '',
             // SAFE DEFAULT: 'none' until we have a confirmed root cause and
-            // staging-validated fix for the v2.4.0 production breakage. Operators
+            // staging-validated fix for the v2.4.1 production breakage. Operators
             // on ZOneTheme must opt in via BO after testing in staging with the
             // F12 console open to capture any reinit-related errors.
             self::CFG_THEME_PRESET      => self::THEME_PRESET_NONE,

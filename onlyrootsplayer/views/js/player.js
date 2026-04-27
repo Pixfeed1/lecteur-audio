@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.4.0
+ * OnlyRoots Persistent Audio Player — v2.4.1
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.4.0
+ * @version   2.4.1
  */
 (function () {
     'use strict';
@@ -79,6 +79,21 @@
     var swupInstance = null;
     var eventsBound  = false;
     var els          = {};
+
+    // Captured at init() time and re-applied after each Swup swap. PrestaShop's
+    // body class generator emits these on the home but a few page templates
+    // (notably some category pages on ZOneTheme) drop them, and
+    // SwupBodyClassPlugin replaces the body class wholesale — so themes that
+    // depend on `body.lang-fr`, `body.country-fr` etc. for visuals would lose
+    // them across navigations. We snapshot the initial set, then top up.
+    var PERSISTENT_BODY_CLASS_PATTERNS = [
+        /^country-/,
+        /^currency-/,
+        /^lang-/,
+        /^is-customer-/,
+        /^no-customer-/,
+    ];
+    var persistentBodyClasses = [];
 
     /* ============================================================ */
     /*  DOM CACHE                                                   */
@@ -1020,6 +1035,18 @@
             } catch (e) {}
             initProductPage();
 
+            // Restore persistent body classes (lang/country/currency/customer)
+            // BEFORE the theme preset runs, in case any theme component reads
+            // body.classList for its layout decisions during reinit.
+            var restoredClasses = restorePersistentBodyClasses();
+            if (restoredClasses.length && window.__orpMonitorEnqueue) {
+                try {
+                    window.__orpMonitorEnqueue('orp:body-class-restored', {
+                        restored: restoredClasses.join(','),
+                    });
+                } catch (e) {}
+            }
+
             // Theme reinit preset (bundled, versioned in git). Loaded by PHP
             // when CONFIG.themePreset !== 'none'. The preset registers itself
             // on window.orpThemePresets[name] without running anything on
@@ -1158,6 +1185,49 @@
     /*  INIT                                                        */
     /* ============================================================ */
 
+    /**
+     * Captures the body classes that should persist across every page on
+     * this shop (locale/currency/customer flags). Called once at init,
+     * before any Swup navigation, so we lock in the canonical set before
+     * theme-specific page classes can shadow them.
+     */
+    function capturePersistentBodyClasses() {
+        try {
+            if (!document.body) return;
+            var current = Array.prototype.slice.call(document.body.classList);
+            persistentBodyClasses = current.filter(function (c) {
+                for (var i = 0; i < PERSISTENT_BODY_CLASS_PATTERNS.length; i++) {
+                    if (PERSISTENT_BODY_CLASS_PATTERNS[i].test(c)) return true;
+                }
+                return false;
+            });
+            dlog('persistent body classes captured:', persistentBodyClasses);
+        } catch (e) {
+            dlog('capturePersistentBodyClasses error', e);
+        }
+    }
+
+    /**
+     * Re-applies any persistent body class missing from the post-swap body.
+     * Returns the list of classes actually re-added (for monitor telemetry).
+     */
+    function restorePersistentBodyClasses() {
+        var restored = [];
+        try {
+            if (!document.body || !persistentBodyClasses.length) return restored;
+            for (var i = 0; i < persistentBodyClasses.length; i++) {
+                var c = persistentBodyClasses[i];
+                if (!document.body.classList.contains(c)) {
+                    document.body.classList.add(c);
+                    restored.push(c);
+                }
+            }
+        } catch (e) {
+            dlog('restorePersistentBodyClasses error', e);
+        }
+        return restored;
+    }
+
     function init() {
         cacheDom();
         if (!els.player || !audio) {
@@ -1165,6 +1235,7 @@
             return;
         }
 
+        capturePersistentBodyClasses();
         detachPlayerToBody();
         bindEvents();
 
