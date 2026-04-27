@@ -3,6 +3,52 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2] — 2026-04-27
+
+### Fixed
+- **Production breakage on fresh 2.3.1 installs.** The 2.3.1 default of
+  `themePreset = 'zonetheme'` caused a hard breakage on the OnlyRoots
+  Reggae homepage (empty product sliders, missing images, broken layout)
+  on fresh installs. Default reverted to `none` until a confirmed root
+  cause is identified in staging. Operators on ZOneTheme switch the
+  dropdown to `zonetheme` manually after validating in staging with the
+  F12 console open.
+
+### Honest note on the root cause
+
+We do **not** yet know why a freshly-loaded `views/js/themes/zonetheme.js`
+breaks the initial home page in production. Code inspection (verified by
+grep) shows the preset function is called only inside the Swup
+`content:replace` hook in `player.js` — never at initial load. The file
+itself is a side-effect-free IIFE that just attaches a function to
+`window.orpThemePresets.zonetheme`. So on paper, loading the file alone
+should not break anything.
+
+The empirical fact remains: enabling the preset on production breaks the
+home. Until that paradox is reconciled (CCC bundling artefact? script
+load-order conflict? actual bug in the reinit code path even when called
+correctly?), the safe path is `none` by default.
+
+### Defensive: context guard
+
+To rule out the (unlikely) possibility that something else on the page
+invokes the preset accidentally, the preset now requires an explicit
+context argument:
+
+```js
+window.orpThemePresets.zonetheme({ trigger: 'swup-content-replace' });
+```
+
+Calls without that exact context object are silently no-op'd with a
+`console.warn`. `player.js` has been updated to pass the context
+explicitly. This is belt-and-suspenders — not a confirmed fix.
+
+### Migration notes
+- Fresh 2.3.2 installs: preset = `none` (safe). Operators enable
+  `zonetheme` in BO after staging validation.
+- Existing 2.3.1 installs that had the production breakage: switch to
+  `none` manually in BO until the root cause is confirmed.
+
 ## [2.3.1] - 2026-04-27
 
 ### Changed

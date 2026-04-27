@@ -1025,7 +1025,10 @@
                 && window.orpThemePresets
                 && typeof window.orpThemePresets[presetName] === 'function') {
                 try {
-                    window.orpThemePresets[presetName]();
+                    // Pass an explicit context so presets can guard against
+                    // accidental invocation from outside the Swup pipeline
+                    // (defensive — see zonetheme.js for the matching guard).
+                    window.orpThemePresets[presetName]({ trigger: 'swup-content-replace' });
                 } catch (e) {
                     try { console.warn('[ORP] theme preset "' + presetName + '" error:', e); } catch (err) {}
                 }

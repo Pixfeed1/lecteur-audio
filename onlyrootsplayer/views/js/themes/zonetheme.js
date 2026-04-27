@@ -103,7 +103,19 @@
         }
     }
 
-    window.orpThemePresets.zonetheme = function () {
+    window.orpThemePresets.zonetheme = function (context) {
+        // Defence in depth: only run when explicitly invoked from the
+        // Swup content:replace hook in player.js. If something else on
+        // the page (a future bug, a third-party module, an admin paste)
+        // ever calls this function, we silently no-op rather than risk
+        // tearing down freshly-attached theme listeners on the initial
+        // page load. The expected call site passes
+        //   { trigger: 'swup-content-replace' }
+        if (!context || context.trigger !== 'swup-content-replace') {
+            safeWarn('[ORP zonetheme] preset called outside Swup context, skipping to avoid double-init');
+            return;
+        }
+
         if (typeof window.jQuery === 'undefined') {
             safeWarn('[ORP zonetheme] jQuery not loaded — preset skipped');
             return;
