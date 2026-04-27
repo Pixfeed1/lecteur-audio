@@ -3,6 +3,78 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] — 2026-04-27
+
+### Added
+
+- **Theme reinit presets**, replacing the unmaintained pasted-snippet
+  workflow that lived in the BO textarea. New BO dropdown
+  `Preset de réinit thème` (`ORP_THEME_PRESET`) ships with two values
+  out of the box:
+  - `none` (default) — pure theme-agnostic, nothing runs after a swap.
+    Existing installs upgrade in place to this value.
+  - `zonetheme` — bundled snippet calibrated for ZOneTheme on
+    OnlyRoots Reggae. Cleans up duplicate listeners on amegamenu (desktop
+    + mobile), left/right sidebars, scroll-to-top, and sticky header
+    wrappers; then re-invokes the 10 theme functions that ZOneTheme
+    attaches to `$(window).on('load', ...)` (`handleCookieMessage`,
+    `stickyHeader`, `scrollToTopButton`, `loadSidebarNavigation`,
+    `loadSidebarCart`, `lazyItemMobileSliderScroll`,
+    `ajaxLoadDrodownContent`, `mobileToggleEvent`,
+    `enableHoverMenuOnTablet`, `setCurrentMenuItem`) **by name**, NOT by
+    re-firing `$(window).trigger('load')`.
+- **`views/js/themes/zonetheme.js`** — versioned, code-reviewable,
+  testable replacement for the pasted snippet. The file registers
+  `window.orpThemePresets.zonetheme` on load but does not run anything
+  on its own; player.js invokes it from the `content:replace` Swup hook.
+
+### Fixed
+
+- **`prestashop.on is not a function` crash** that fired on every Swup
+  navigation when the previous BO snippet ended with
+  `$(window).trigger('load')`. Re-firing the load event woke up every
+  module's load handler — Google Analytics, vatnumbercleaner,
+  zonemegamenu, etc. — and several of them call `prestashop.on(...)`,
+  which throws after a swap because PrestaShop's inline
+  `var prestashop = {...}` script gets re-executed and clobbers the live
+  prestashop object. The new ZOneTheme preset never calls
+  `$(window).trigger('load')`; it invokes only the specific theme
+  functions, leaving foreign modules alone.
+- The same change incidentally stops the cascade of duplicate
+  `module/vatnumbercleaner/vncfc` and Google Analytics XHRs that were
+  firing on every swap.
+
+### Changed
+
+- The "JS personnalisé après swap Swup" textarea is no longer the
+  primary integration path. Its description has been updated to
+  "additional JS that runs AFTER the theme preset" so operators
+  understand the order of execution.
+- The `content:replace` hook now runs presets in this order:
+  `scheduleInject` → `prestashop.emit('updatedProductList', ...)` →
+  `initProductPage` → **theme preset (if any)** → **postSwapJs textarea
+  (if any)** → adaptive watchdog measurement.
+
+### Backwards compatibility
+
+No breaking change.
+- Existing 2.2.x installs upgrade to `themePreset = 'none'` so the swap
+  pipeline is byte-identical to before the upgrade.
+- Operators who pasted the legacy `$(window).trigger('load')` snippet
+  into the textarea: switch the dropdown to `ZOneTheme` and **delete
+  the textarea content**. Failing to clear the textarea will run both
+  the bundled preset AND the legacy snippet, which re-introduces the
+  prestashop crash.
+
+### Adding new presets
+
+`views/js/themes/<presetname>.js` should attach a function to
+`window.orpThemePresets[presetname]` and do nothing else on load.
+Register the preset name in
+`OnlyRootsPlayer::VALID_THEME_PRESETS` and add an option to the BO
+select in `renderForm()`. The PHP side already wires the file load
+based on the selected preset — no additional plumbing needed.
+
 ## [2.2.2] — 2026-04-27
 
 ### Fixed

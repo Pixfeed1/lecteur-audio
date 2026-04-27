@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.2.2
+ * OnlyRoots Persistent Audio Player — v2.3.0
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.2.2
+ * @version   2.3.0
  */
 (function () {
     'use strict';
@@ -1015,10 +1015,26 @@
             } catch (e) {}
             initProductPage();
 
-            // Custom JS hook (theme reinit code injected by admin via BO).
-            // Runs BEFORE the watchdog adaptation so the snippet's runtime is
-            // included in the measured swap duration — slow reinit themes
-            // automatically get a proportionally larger watchdog window.
+            // Theme reinit preset (bundled, versioned in git). Loaded by PHP
+            // when CONFIG.themePreset !== 'none'. The preset registers itself
+            // on window.orpThemePresets[name] without running anything on
+            // file-load, so we explicitly invoke it here. Each preset is
+            // self-sandboxed (try/catch around each individual reinit step).
+            var presetName = CONFIG.themePreset;
+            if (presetName && presetName !== 'none'
+                && window.orpThemePresets
+                && typeof window.orpThemePresets[presetName] === 'function') {
+                try {
+                    window.orpThemePresets[presetName]();
+                } catch (e) {
+                    try { console.warn('[ORP] theme preset "' + presetName + '" error:', e); } catch (err) {}
+                }
+            }
+
+            // Custom JS hook (additional code, runs AFTER the theme preset).
+            // Runs BEFORE the watchdog adaptation so its runtime is included
+            // in the measured swap duration — slow reinit themes automatically
+            // get a proportionally larger watchdog window.
             if (CONFIG.postSwapJs) {
                 try {
                     new Function(CONFIG.postSwapJs)();

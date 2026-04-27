@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.2.2
+ * @version   2.3.0
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -37,6 +37,7 @@ class OnlyRootsPlayer extends Module
     const CFG_EXTRA_EXCLUDES    = 'ORP_EXTRA_EXCLUDES';
     const CFG_WATCHDOG_MS       = 'ORP_WATCHDOG_MS';
     const CFG_POST_SWAP_JS      = 'ORP_POST_SWAP_JS';
+    const CFG_THEME_PRESET      = 'ORP_THEME_PRESET';
 
     /* Defaults — written on install, restorable from BO */
     const DEFAULT_CONTAINER         = '#content-wrapper, #content, main, #main';
@@ -46,11 +47,18 @@ class OnlyRootsPlayer extends Module
     const WATCHDOG_MIN_MS           = 500;
     const WATCHDOG_MAX_MS           = 5000;
 
+    /* Theme reinit presets shipped with the module. Each preset name maps to
+       views/js/themes/{name}.js which must define
+       window.orpThemePresets[name] = function () { ... }. */
+    const THEME_PRESET_NONE       = 'none';
+    const THEME_PRESET_ZONETHEME  = 'zonetheme';
+    const VALID_THEME_PRESETS     = [self::THEME_PRESET_NONE, self::THEME_PRESET_ZONETHEME];
+
     public function __construct()
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.2.2';
+        $this->version          = '2.3.0';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -106,6 +114,9 @@ class OnlyRootsPlayer extends Module
             self::CFG_EXTRA_EXCLUDES    => '',
             self::CFG_WATCHDOG_MS       => self::DEFAULT_WATCHDOG_MS,
             self::CFG_POST_SWAP_JS      => '',
+            // Default 'none' to preserve theme-agnostic behaviour on upgrades.
+            // Operators on ZOneTheme deployments switch to 'zonetheme' via BO.
+            self::CFG_THEME_PRESET      => self::THEME_PRESET_NONE,
         ];
         // updateValue is an upsert — existing 2.0.0 installs keep their values,
         // only the new keys (e.g. WATCHDOG_MS) get the default written.
@@ -138,6 +149,7 @@ class OnlyRootsPlayer extends Module
             self::CFG_EXTRA_EXCLUDES,
             self::CFG_WATCHDOG_MS,
             self::CFG_POST_SWAP_JS,
+            self::CFG_THEME_PRESET,
         ];
         foreach ($keys as $k) {
             Configuration::deleteByName($k);
@@ -212,6 +224,7 @@ class OnlyRootsPlayer extends Module
             // remains formatted as authored. Tools::getValue strips slashes
             // already so we only cast to string here.
             self::CFG_POST_SWAP_JS      => (string) Tools::getValue(self::CFG_POST_SWAP_JS),
+            self::CFG_THEME_PRESET      => $this->sanitizeThemePreset(Tools::getValue(self::CFG_THEME_PRESET)),
         ];
 
         // Restore defaults on empty fields rather than letting the front break
@@ -344,10 +357,24 @@ class OnlyRootsPlayer extends Module
                         ],
                     ],
                     [
+                        'type'    => 'select',
+                        'label'   => $this->tAdmin('Preset de réinit thème'),
+                        'name'    => self::CFG_THEME_PRESET,
+                        'desc'    => $this->tAdmin('Code de réinitialisation thème exécuté après chaque swap Swup. « ZOneTheme » charge un script bundlé qui ré-attache les listeners du megamenu, sidebars, sticky header et scroll-to-top. « Aucun » laisse le module purement theme-agnostic. Si vous avez besoin d\'ajouter du code custom en plus du preset, utilisez le champ « JS personnalisé » ci-dessous.'),
+                        'options' => [
+                            'query' => [
+                                ['id' => self::THEME_PRESET_NONE,      'name' => $this->tAdmin('Aucun (theme-agnostic)')],
+                                ['id' => self::THEME_PRESET_ZONETHEME, 'name' => $this->tAdmin('ZOneTheme (OnlyRoots Reggae)')],
+                            ],
+                            'id'   => 'id',
+                            'name' => 'name',
+                        ],
+                    ],
+                    [
                         'type'  => 'textarea',
                         'label' => $this->tAdmin('JS personnalisé après swap Swup'),
                         'name'  => self::CFG_POST_SWAP_JS,
-                        'desc'  => $this->tAdmin('JS exécuté après chaque swap Swup réussi. À utiliser pour réinitialiser les modules spécifiques au thème (mégamenu, header sticky, swipers, etc.). S\'exécute dans la portée globale.'),
+                        'desc'  => $this->tAdmin('JS additionnel exécuté APRÈS le preset thème ci-dessus. Utile pour des besoins spécifiques (tracking custom, modules tiers, etc.). Laisser vide si le preset suffit. S\'exécute dans la portée globale.'),
                         'cols'  => 80,
                         'rows'  => 8,
                     ],
@@ -393,7 +420,33 @@ class OnlyRootsPlayer extends Module
             self::CFG_EXTRA_EXCLUDES    => Configuration::get(self::CFG_EXTRA_EXCLUDES),
             self::CFG_WATCHDOG_MS       => $this->getWatchdogMs(),
             self::CFG_POST_SWAP_JS      => (string) Configuration::get(self::CFG_POST_SWAP_JS),
+            self::CFG_THEME_PRESET      => $this->getThemePreset(),
         ];
+    }
+
+    /**
+     * Validates a theme preset name against the whitelist. Falls back to
+     * 'none' for any unknown value — never trust raw $_POST.
+     */
+    private function sanitizeThemePreset($value)
+    {
+        $value = (string) $value;
+        return in_array($value, self::VALID_THEME_PRESETS, true)
+            ? $value
+            : self::THEME_PRESET_NONE;
+    }
+
+    /**
+     * Returns the currently-configured theme preset, defaulting to 'none'
+     * for installs upgrading from versions that didn't have this key.
+     */
+    private function getThemePreset()
+    {
+        $stored = Configuration::get(self::CFG_THEME_PRESET);
+        if ($stored === false || $stored === null || $stored === '') {
+            return self::THEME_PRESET_NONE;
+        }
+        return $this->sanitizeThemePreset($stored);
     }
 
     /**
@@ -452,6 +505,22 @@ class OnlyRootsPlayer extends Module
             }
         }
 
+        // Theme reinit preset (registered BEFORE player.js so the preset
+        // function is defined on `window.orpThemePresets` by the time the
+        // player's content:replace hook runs and wants to call it).
+        $preset = $this->getThemePreset();
+        if ($preset !== self::THEME_PRESET_NONE) {
+            $presetRel  = 'views/js/themes/' . $preset . '.js';
+            $presetPath = $modulePath . $presetRel;
+            if (file_exists($presetPath)) {
+                $this->context->controller->registerJavascript(
+                    'onlyrootsplayer-theme-' . $preset,
+                    'modules/' . $this->name . '/' . $presetRel,
+                    ['position' => 'bottom', 'priority' => 195, 'version' => $this->fileVersion($presetPath)]
+                );
+            }
+        }
+
         // Player JS
         $jsVer = $this->fileVersion($modulePath . 'views/js/player.js');
         $this->context->controller->registerJavascript(
@@ -485,6 +554,7 @@ class OnlyRootsPlayer extends Module
                 'watchdogMs'       => $this->getWatchdogMs(),
                 'watchdogMaxMs'    => self::WATCHDOG_MAX_MS,
                 'postSwapJs'       => (string) Configuration::get(self::CFG_POST_SWAP_JS),
+                'themePreset'      => $this->getThemePreset(),
                 'debug'            => $debug,
             ],
             'onlyrootsPlayerL10n' => [
