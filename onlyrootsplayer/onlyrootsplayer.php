@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.4.6
+ * @version   2.4.7
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -66,7 +66,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.4.6';
+        $this->version          = '2.4.7';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -123,7 +123,7 @@ class OnlyRootsPlayer extends Module
             self::CFG_WATCHDOG_MS       => self::DEFAULT_WATCHDOG_MS,
             self::CFG_POST_SWAP_JS      => '',
             // SAFE DEFAULT: 'none' until we have a confirmed root cause and
-            // staging-validated fix for the v2.4.6 production breakage. Operators
+            // staging-validated fix for the v2.4.7 production breakage. Operators
             // on ZOneTheme must opt in via BO after testing in staging with the
             // F12 console open to capture any reinit-related errors.
             self::CFG_THEME_PRESET      => self::THEME_PRESET_NONE,
@@ -289,8 +289,12 @@ class OnlyRootsPlayer extends Module
             'UTF-8'
         );
 
+        // getAdminLink(..., true) appends the admin token. Without it, PrestaShop's
+        // CSRF middleware rejects the POST with a "CLÉ DE SÉCURITÉ INVALIDE"
+        // page (observed in v2.4.7 production when an operator clicked
+        // "Vider le log").
         $action = htmlspecialchars(
-            $this->context->link->getAdminLink('AdminModules', false)
+            $this->context->link->getAdminLink('AdminModules', true)
                 . '&configure=' . $this->name . '&tab_module=' . $this->tab . '&module_name=' . $this->name,
             ENT_QUOTES | ENT_SUBSTITUTE,
             'UTF-8'
@@ -902,7 +906,7 @@ class OnlyRootsPlayer extends Module
         // sometimes diverge from the standard layout (no megamenu, different
         // wrapper structure), and Swup ends up with a half-swapped page
         // missing the header/footer (observed on OnlyRoots Reggae /
-        // ZOneTheme on /fr/nous-contacter — captured in the v2.4.6 monitor
+        // ZOneTheme on /fr/nous-contacter — captured in the v2.4.7 monitor
         // log).
         $pageNames = [
             'cart', 'order', 'order-confirmation', 'authentication',

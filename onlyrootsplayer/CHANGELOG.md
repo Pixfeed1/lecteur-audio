@@ -3,6 +3,28 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.7] — 2026-04-28
+
+### Fixed
+
+- **"CLÉ DE SÉCURITÉ INVALIDE" page when clicking "Vider le log" or
+  "Télécharger le log" in the BO Diagnostic panel.** The forms posted to
+  `getAdminLink('AdminModules', false)` — second arg `false` skips
+  appending PrestaShop's admin CSRF token. Without it, PS's anti-CSRF
+  middleware rejects the POST. Switched both clear-log and download-log
+  forms to `getAdminLink('AdminModules', true)` so the token is in the
+  action URL.
+
+### Validation
+
+The v2.4.6 monitor capture from 22:56:51 onwards confirmed the contact-
+page Swup-skip fix works in production: every navigation to
+`/fr/nous-contacter` triggers `orp:swup:skipped-on-excluded-page`, and
+subsequent navigations away land on a clean fully-rendered page (no
+more catastrophic state). Also confirmed: the home-block slider
+re-init on Swup return to `/fr/` (`homeBlockSliders=7`,
+`sliders: "0" -> "7"` in dom:diff).
+
 ## [2.4.6] — 2026-04-28
 
 The v2.4.5 monitor capture (with screenshot of a hollowed-out page)
