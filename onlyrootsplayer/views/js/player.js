@@ -1022,30 +1022,37 @@
         });
 
         swupInstance.hooks.on('content:replace', function (visit) {
-            // CATASTROPHIC SWAP DETECTOR. If the swap left the page without
-            // a header element, we're in the same broken state we observed
-            // on /fr/nous-contacter -> /fr/ in the v2.4.3 monitor capture
-            // (htmlClasses wiped, hasHeader true->false, megamenu items
-            // 6->0). The cause is a Swup container resolution mismatch
-            // between the source page and the destination — usually the
-            // source page (a CMS / contact / etc. with non-standard layout)
-            // gave Swup a too-broad container at init, and the destination
-            // page's content is being inserted at the wrong DOM level.
+            // CATASTROPHIC SWAP DETECTOR. Smoking gun: Swup adds the
+            // `swup-enabled` class to <html> at init; if that class is gone
+            // after a swap, the swap nuked the html element itself (or
+            // something close to it). This is exactly the state the v2.4.3
+            // monitor captured on /fr/nous-contacter -> /fr/:
+            //
+            //   htmlClasses: "swup-enabled" -> ""
+            //   hasHeader:   "true" -> "false"
+            //   hasFooter:   "true" -> "false"
+            //   inlineStyleTags: "4" -> "0"
+            //
+            // The earlier v2.4.4 detector checked `header, #header` selectors
+            // but that returns truthy when ANY <header> exists anywhere
+            // (cart sidebar template, hidden modals, etc.) — so it false-
+            // negatived in production. The `swup-enabled` class on <html> is
+            // a single, unambiguous flag for Swup's own integrity.
             //
             // Recovery: bail to a full reload of the destination URL. The
             // user loses the SPA continuity on this single navigation but
             // gets a working page back instead of a half-rendered one.
-            if (!document.querySelector('header, #header')) {
+            if (!document.documentElement.classList.contains('swup-enabled')) {
                 var destUrl = (visit && visit.to && visit.to.url) ? visit.to.url : window.location.href;
                 if (window.__orpMonitorEnqueue) {
                     try {
                         window.__orpMonitorEnqueue('orp:catastrophic-swap-recovered', {
                             destUrl: destUrl,
-                            missing: 'header',
+                            missing: 'swup-enabled-class-on-html',
                         });
                     } catch (e) {}
                 }
-                try { console.warn('[ORP] catastrophic swap detected (no header) — full reload to', destUrl); } catch (e) {}
+                try { console.warn('[ORP] catastrophic swap detected (swup-enabled class wiped from <html>) — full reload to', destUrl); } catch (e) {}
                 window.location.assign(destUrl);
                 return;
             }

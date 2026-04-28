@@ -3,6 +3,27 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.5] — 2026-04-28
+
+### Fixed
+
+- **Catastrophic-swap detector now uses the right signal.** The v2.4.4
+  detector checked `!document.querySelector('header, #header')`. In the
+  v2.4.4 production capture on `/fr/nous-contacter -> /fr/`, that
+  selector still matched somewhere in the broken page (likely a hidden
+  cart sidebar header or a modal template), so the detector was
+  false-negative and the recovery never fired — the user kept seeing the
+  hollowed-out page.
+
+  Replaced with a single, unambiguous check:
+  `document.documentElement.classList.contains('swup-enabled')`. Swup
+  adds that class to `<html>` at init; if it's gone after a swap, the
+  swap removed `<html>`'s own attributes — exactly what the v2.4.3
+  monitor captured (`htmlClasses: "swup-enabled" -> ""`). When that
+  happens, `window.location.assign(visit.to.url)` recovers via full
+  reload. Surfaces as `orp:catastrophic-swap-recovered missing=
+  swup-enabled-class-on-html` in the monitor.
+
 ## [2.4.4] — 2026-04-27
 
 Two follow-up fixes informed by the v2.4.3 monitor capture:
