@@ -3,6 +3,34 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.8] — 2026-04-28
+
+### Fixed
+
+- **Theme custom colours wiped on every Swup swap (header noir →
+  blanc, megamenu hover broken).** ZOneTheme renders an inline
+  `<style>` tag in `<head>` from its BO color settings (template
+  `_partials/stylesheets.tpl`, fed by `$stylesheets.inline`). The
+  `SwupHeadPlugin` we configured with no options was running its
+  default diff algorithm, which removed that `<style>` because it
+  doesn't always re-serialise to identical `outerHTML` between two
+  Smarty renders even when the content is logically the same. Symptom:
+  the v2.4.7 monitor capture showed `inlineStyleTags: "3" -> "2"` on
+  every navigation, exactly matching the visual breakage the operator
+  reported (color inversion, megamenu cassé, etc.).
+
+  Fix: pass `persistAssets: true` to `SwupHeadPlugin`. Per the plugin
+  source, that auto-enables `persistTags:
+  "link[rel=stylesheet], script[src], style"` — meaning every
+  stylesheet link, every script-src, and every inline `<style>` in
+  `<head>` is preserved across navigations regardless of what the
+  destination's `<head>` contains.
+
+  This is a safer default for any PrestaShop deployment, not just
+  ZOneTheme: per-page CSS variations are uncommon, while shop-wide
+  theme styles are universal — so persisting all of them avoids a
+  whole class of silent regressions.
+
 ## [2.4.7] — 2026-04-28
 
 ### Fixed

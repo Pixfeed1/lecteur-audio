@@ -925,7 +925,18 @@
         dlog('swup container resolved to', container.selector, 'withProducts=', container.withProducts);
 
         var plugins = [];
-        if (typeof window.SwupHeadPlugin === 'function')      plugins.push(new window.SwupHeadPlugin());
+        // SwupHeadPlugin with persistAssets: true keeps <link rel=stylesheet>,
+        // <script src>, and <style> tags across swaps. Without this, ZOneTheme's
+        // BO-generated inline <style> in <head> (which carries the custom theme
+        // colours, header background, megamenu hover overrides etc.) gets
+        // dropped by HeadPlugin's diff algorithm because the same content
+        // re-rendered between pages doesn't always serialise to identical
+        // outerHTML. Result before this fix: header noir devenait blanc,
+        // megamenu hover cassé, etc. — captured in the v2.4.7 monitor as
+        // `inlineStyleTags: "3" -> "2"` on every navigation.
+        if (typeof window.SwupHeadPlugin === 'function') {
+            plugins.push(new window.SwupHeadPlugin({ persistAssets: true }));
+        }
         if (typeof window.SwupScriptsPlugin === 'function') {
             plugins.push(new window.SwupScriptsPlugin({ head: true, body: true }));
         }
