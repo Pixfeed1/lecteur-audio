@@ -3,6 +3,53 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.6] — 2026-04-28
+
+The v2.4.5 monitor capture (with screenshot of a hollowed-out page)
+proved two things:
+1. The catastrophic state on `/fr/nous-contacter -> /fr/` is real and
+   reproducible. `htmlClasses: "swup-enabled" -> ""` confirmed.
+2. The v2.4.5 deferred-detector did NOT fire (no
+   `orp:catastrophic-swap-recovered` in the log). The class was still
+   present at the moment our hook ran inline; some later plugin in
+   Swup's chain wipes it AFTER our hook executes.
+
+### Fixed — primary fix: skip Swup init on excluded pages
+
+`initSwup()` now self-checks the CURRENT URL against the exclusion list
+(`shouldExcludeFromSwup(window.location.href)`) and bails early if the
+current page is excluded. The previous logic only filtered OUTGOING
+links via Swup's `ignoreVisit`; nothing prevented Swup from initialising
+on an excluded page after a full reload landed there.
+
+Concretely: when the user lands on `/fr/nous-contacter` (full reload via
+the existing `contact` exclusion), Swup is no longer initialised.
+Subsequent clicks (e.g., the OnlyRoots logo back to home) are normal
+`<a>` navigations — full reloads, audio briefly pauses then resumes from
+localStorage. No more half-swapped, hollowed-out home page.
+
+Telemetry: `orp:swup:skipped-on-excluded-page` event when the skip
+fires.
+
+### Improved — safety-net detector now runs deferred
+
+The `content:replace` catastrophic detector moved into a
+`setTimeout(fn, 0)` so it runs after every other content:replace hook
+(including whichever Swup plugin actually wipes `swup-enabled` on the
+catastrophic path). The recovery (`window.location.assign(destUrl)`)
+fires from there.
+
+This is the safety net — the primary fix above prevents the catastrophe
+from being triggered in the first place. The deferred detector catches
+any OTHER fragile page we haven't listed in the static exclusion array
+yet.
+
+### Backwards compatibility
+
+No breaking change. Operators who already rely on the contact / sitemap
+/ stores exclusions added in 2.4.3 see strictly improved behaviour:
+those pages no longer half-swap on departure.
+
 ## [2.4.5] — 2026-04-28
 
 ### Fixed

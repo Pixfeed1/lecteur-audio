@@ -868,6 +868,32 @@
             return false;
         }
 
+        // Bail if the CURRENT page is in the exclusion list. This is the
+        // proper home for "don't SPA from this page" — the per-link
+        // ignoreVisit() check elsewhere only catches links going TO an
+        // excluded URL, not links going FROM one. Without this guard, the
+        // contact page (fresh-loaded after extraExcludes triggered a full
+        // reload) would still init Swup, and clicks back to the home would
+        // fire a swap whose container resolution lands on a too-greedy
+        // wrapper of the contact template — exactly the catastrophic state
+        // captured in v2.4.5 (htmlClasses wiped, header/footer gone, etc.).
+        try {
+            if (shouldExcludeFromSwup(window.location.href)) {
+                if (window.__orpMonitorEnqueue) {
+                    try {
+                        window.__orpMonitorEnqueue('orp:swup:skipped-on-excluded-page', {
+                            currentUrl: window.location.pathname,
+                        });
+                    } catch (e) {}
+                }
+                try { console.warn('[ORP] Swup not initialized: current page is in exclusion list. All links from this page will full-reload.'); } catch (e) {}
+                dlog('current page is in exclusion list — Swup not initialized');
+                return false;
+            }
+        } catch (e) {
+            dlog('exclusion self-check error', e);
+        }
+
         // Per-session kill-switch: if the previous tab/page already had
         // 2+ failed swaps, fall back to classic navigation for this session.
         try {
@@ -1022,28 +1048,24 @@
         });
 
         swupInstance.hooks.on('content:replace', function (visit) {
-            // CATASTROPHIC SWAP DETECTOR. Smoking gun: Swup adds the
-            // `swup-enabled` class to <html> at init; if that class is gone
-            // after a swap, the swap nuked the html element itself (or
-            // something close to it). This is exactly the state the v2.4.3
-            // monitor captured on /fr/nous-contacter -> /fr/:
+            // SAFETY NET: catastrophic swap detection, deferred. The v2.4.5
+            // detector ran inline in this hook but the v2.4.5 monitor capture
+            // proved Swup's class manipulation on <html> happens AFTER our
+            // hook (probably in another plugin's content:replace handler
+            // registered later in the chain). By the time we'd checked, the
+            // class hadn't been wiped yet. Deferring via setTimeout(0)
+            // pushes the check to the end of the current task queue, after
+            // every sync hook has run — at which point the catastrophic
+            // state is fully visible.
             //
-            //   htmlClasses: "swup-enabled" -> ""
-            //   hasHeader:   "true" -> "false"
-            //   hasFooter:   "true" -> "false"
-            //   inlineStyleTags: "4" -> "0"
-            //
-            // The earlier v2.4.4 detector checked `header, #header` selectors
-            // but that returns truthy when ANY <header> exists anywhere
-            // (cart sidebar template, hidden modals, etc.) — so it false-
-            // negatived in production. The `swup-enabled` class on <html> is
-            // a single, unambiguous flag for Swup's own integrity.
-            //
-            // Recovery: bail to a full reload of the destination URL. The
-            // user loses the SPA continuity on this single navigation but
-            // gets a working page back instead of a half-rendered one.
-            if (!document.documentElement.classList.contains('swup-enabled')) {
-                var destUrl = (visit && visit.to && visit.to.url) ? visit.to.url : window.location.href;
+            // This is a SAFETY NET: the primary fix for the contact-page
+            // catastrophe is the new "skip Swup init when current URL is in
+            // the exclusion list" check up in initSwup(). The detector
+            // below catches any OTHER page that breaks Swup we haven't
+            // listed yet.
+            var destUrl = (visit && visit.to && visit.to.url) ? visit.to.url : window.location.href;
+            setTimeout(function () {
+                if (document.documentElement.classList.contains('swup-enabled')) return;
                 if (window.__orpMonitorEnqueue) {
                     try {
                         window.__orpMonitorEnqueue('orp:catastrophic-swap-recovered', {
@@ -1054,8 +1076,7 @@
                 }
                 try { console.warn('[ORP] catastrophic swap detected (swup-enabled class wiped from <html>) — full reload to', destUrl); } catch (e) {}
                 window.location.assign(destUrl);
-                return;
-            }
+            }, 0);
 
             scheduleInject();
             try {
