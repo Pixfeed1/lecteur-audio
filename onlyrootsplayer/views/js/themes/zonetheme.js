@@ -409,6 +409,119 @@
     }
 
     /* ============================================================ */
+    /*  AJAX MEGAMENU CONTENT (dropdowns loaded async by ZOneTheme) */
+    /* ============================================================ */
+
+    /**
+     * ZOneTheme defers the megamenu dropdown content loading to a single
+     * `ajaxLoadDrodownContent()` call inside its `$(window).on('load',...)`
+     * handler. After a Swup swap the new page's HTML has empty
+     * `.js-dropdown-content` placeholders inside `.js-ajax-mega-menu` and
+     * window.load doesn't fire again — so hover on a megamenu category
+     * shows nothing. Source: `ajaxLoadDrodownContent()` in
+     * `_dev/js/aone/_aonemegamenu.js`. The destination URL is exposed as
+     * the global `varMenuDropdownContentController` (set by an inline
+     * <script> the theme renders).
+     */
+    function reinitAjaxMegamenuContent($) {
+        var $ajaxmenu = $('.js-ajax-mega-menu');
+        if (!$ajaxmenu.length) return false;
+        if (typeof window.varMenuDropdownContentController === 'undefined') return false;
+
+        // Skip if dropdowns are already populated (no `.js-dropdown-content`
+        // placeholder left to replace). Idempotent across re-runs.
+        var $placeholders = $('.js-dropdown-content', $ajaxmenu);
+        if (!$placeholders.length) return false;
+
+        try {
+            $.ajax({
+                type: 'GET',
+                url: window.varMenuDropdownContentController,
+                dataType: 'json',
+                success: function (dropdown) {
+                    try {
+                        $('.js-dropdown-content', $ajaxmenu).each(function () {
+                            var item = $(this).data('id-menu');
+                            if (dropdown && dropdown[item]) {
+                                $(this).replaceWith(dropdown[item]);
+                            }
+                        });
+                        // After replacing dropdowns, re-position them. Source:
+                        // updateDropdownPosition() in _aonemegamenu.js — needs
+                        // the dropdown content actually rendered to measure
+                        // widths, hence why it runs in the success callback.
+                        updateMegamenuDropdownPosition($);
+                    } catch (e) {
+                        safeWarn('[ORP zonetheme] dropdown replace failed:', e);
+                    }
+                },
+                error: function (xhr) {
+                    safeWarn('[ORP zonetheme] varMenuDropdownContentController fetch failed:', xhr && xhr.status);
+                }
+            });
+            return true;
+        } catch (e) {
+            safeWarn('[ORP zonetheme] ajax megamenu init threw:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Re-positions each `.adropdown` so it stays within the megamenu's
+     * horizontal bounds. Source: newUpdateDropdownPosition() and
+     * newUpdateDropdownPositionRTL() in _aonemegamenu.js.
+     */
+    function updateMegamenuDropdownPosition($) {
+        try {
+            var $amegamenu = $('#amegamenu');
+            if (!$amegamenu.length) return;
+
+            var rtl = $amegamenu.hasClass('amegamenu_rtl');
+            var mmWidth = $amegamenu.outerWidth();
+
+            $('.adropdown', $amegamenu).each(function () {
+                var $dropdown = $(this);
+                var $menu     = $dropdown.parent('.amenu-item');
+                var dWidth    = $dropdown.outerWidth();
+
+                if (mmWidth <= dWidth) return;
+
+                var mid;
+                var gap;
+                if (rtl) {
+                    mid = (mmWidth - dWidth) / 2;
+                    gap = ((mmWidth - $menu.outerWidth()) / 2)
+                        - (mmWidth - $menu.position().left - $menu.outerWidth() - parseFloat($menu.css('margin-right')));
+                    if (mid > gap) {
+                        if (mid - gap + dWidth > mmWidth) {
+                            $dropdown.css('margin-right', (mmWidth - dWidth) + 'px');
+                        } else {
+                            $dropdown.css('margin-right', (mid - gap) + 'px');
+                        }
+                    } else {
+                        $dropdown.css('margin-right', '0px');
+                    }
+                } else {
+                    mid = (mmWidth - dWidth) / 2;
+                    gap = ((mmWidth - $menu.outerWidth()) / 2)
+                        - ($menu.position().left + parseFloat($menu.css('margin-left')));
+                    if (mid > gap) {
+                        if (mid - gap + dWidth > mmWidth) {
+                            $dropdown.css('margin-left', (mmWidth - dWidth) + 'px');
+                        } else {
+                            $dropdown.css('margin-left', (mid - gap) + 'px');
+                        }
+                    } else {
+                        $dropdown.css('margin-left', '0px');
+                    }
+                }
+            });
+        } catch (e) {
+            safeWarn('[ORP zonetheme] updateMegamenuDropdownPosition threw:', e);
+        }
+    }
+
+    /* ============================================================ */
     /*  PRESET ENTRY POINT                                          */
     /* ============================================================ */
 
@@ -447,6 +560,12 @@
         rebindSidebars($);
         rebindScrollToTop($);
 
+        // AJAX megamenu dropdown content. Returns true if the AJAX request
+        // was fired (placeholders existed and the controller URL is known).
+        // The actual dropdown HTML is replaced asynchronously in the
+        // success callback — won't show in this telemetry tick.
+        var megamenuAjaxFired = reinitAjaxMegamenuContent($);
+
         // Surface what actually fired so the diagnostic monitor can confirm
         // each step, and so we can spot a renamed selector in a future
         // ZOneTheme update before the customer notices.
@@ -459,6 +578,7 @@
                     brandSliders:     sliders.brand,
                     featuredSliders:  sliders.featured,
                     stickyHeader:     stickyOk ? 1 : 0,
+                    megamenuAjax:     megamenuAjaxFired ? 1 : 0,
                     rtl:              rtl ? 1 : 0,
                 });
             } catch (e) {}

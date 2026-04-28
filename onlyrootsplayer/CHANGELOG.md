@@ -3,6 +3,42 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.9] — 2026-04-28
+
+### Fixed
+
+- **Megamenu dropdowns empty on hover after Swup navigation.** ZOneTheme
+  defers the actual dropdown HTML to a single AJAX call inside its
+  `$(window).on('load', ...)` handler in `_aonemegamenu.js`:
+  `ajaxLoadDrodownContent()` fetches `varMenuDropdownContentController`
+  and replaces every `.js-dropdown-content` placeholder with the loaded
+  markup. Window.load doesn't fire on Swup swaps, so on every navigated-
+  to page, hovering a megamenu category opened an empty dropdown. The
+  v2.4.8 monitor capture confirmed it: the user reported "quand je
+  survole une catégorie, le dropdown ne s'ouvre pas" right after the
+  visual-color fix landed.
+
+  Fix: `reinitAjaxMegamenuContent()` re-implements the AJAX call inline
+  in the preset. Idempotent (skips if no `.js-dropdown-content`
+  placeholders remain in the DOM), gated on
+  `varMenuDropdownContentController` being defined globally (which it
+  is, via the inline `<script>` ZOneTheme renders — preserved across
+  Swup swaps by `SwupScriptsPlugin`'s re-execution of inline scripts).
+
+  After the placeholders are replaced, `updateMegamenuDropdownPosition()`
+  re-runs ZOneTheme's `newUpdateDropdownPosition` /
+  `newUpdateDropdownPositionRTL` math to keep each `.adropdown` aligned
+  inside the megamenu's horizontal bounds. Both LTR and RTL layouts
+  handled per the original source.
+
+### Telemetry
+
+The `orp:preset:invoked` event now reports `megamenuAjax: 1` when the
+AJAX fetch was fired (placeholders existed AND the controller URL was
+known) or `0` when skipped. The 0 case typically means the destination
+page didn't have a megamenu (CMS / contact / etc.) or the dropdowns
+are already populated from a previous run on this page.
+
 ## [2.4.8] — 2026-04-28
 
 ### Fixed
