@@ -3,6 +3,61 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.14] — 2026-04-29
+
+Two in-scope bug fixes from operator's client feedback. Other client
+requests (play buttons in product description short/long, Discogs
+track parsing à la Juno/HHV) are out of the original quote scope and
+have been quoted separately.
+
+### Fixed
+
+- **Le son des deux lecteurs sur la page produit se superpose.** On a
+  product page, the third-party `productaudioplaylistplugin` module
+  renders its own audio UI (`.progression-playlist`) with its own
+  `<audio>` elements. Without coordination both could play
+  simultaneously and their tracks layered on top of each other.
+
+  Bidirectional `<audio>` pause coordination added in `bindEvents()`:
+  - When our player's `<audio>` fires `play`, we walk every other
+    `<audio>` element on the page and pause those that are playing.
+  - A document-level capture-phase `play` listener pauses our player
+    when any non-orp `<audio>` element starts. Capture phase ensures
+    we react before any third-party event handlers can fire.
+
+  Net effect: only one audio source is audible at any time, regardless
+  of which player triggered playback. Required by the "Intégration
+  avec le module audio existant" deliverable in the original quote.
+
+- **Switcher de langue impossible quand un audio joue.** The
+  PrestaShop `ps_languageselector` template renders each language link
+  with `data-iso-code="..."` and the URLs it generates use the
+  query-string form (`/?id_lang=N`) rather than the path-prefix form
+  (`/fr/...`) our `ignoreVisit` detects. Swup was therefore trying to
+  Swup-swap into them and ended up with a mismatched layout / no
+  navigation at all.
+
+  Excluded `[data-iso-code]` from the Swup `linkSelector`. Language
+  switcher clicks now produce a normal full reload — the only correct
+  behaviour on language change anyway, since the entire shop content
+  needs re-rendering in the new locale. Audio stops at the reload (the
+  user can press play to resume from localStorage state).
+
+### Out of scope (quoted separately)
+
+The following client requests are not addressed here as they fall
+outside the original quote ("Lecteur fixe persistant cross-pages" and
+"Bouton play sur accueil et catégories"):
+
+- Track listing in product long description (Juno-style)
+- Play button in product short description (HHV-style)
+- Per-track play button inside the long description
+
+These would require parsing/persisting Discogs track metadata,
+extending the product template, managing per-track audio elements,
+and synchronising all of them with the persistent footer player —
+roughly equivalent to a second module.
+
 ## [2.4.13] — 2026-04-29
 
 ### Fixed (real fix this time)

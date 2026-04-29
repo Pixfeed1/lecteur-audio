@@ -645,6 +645,21 @@
             state.playing = true;
             updatePlayButton();
             updateMiniButtons();
+            // Pause every OTHER <audio> element on the page when our player
+            // starts. Required by the "Intégration avec le module audio
+            // existant" deliverable: on a product page, the third-party
+            // `productaudioplaylistplugin` module renders its own player
+            // (`.progression-playlist`) with its own <audio> tags. Without
+            // this coordination both players ran simultaneously and the
+            // sounds overlapped (operator confirmed this is the bug).
+            try {
+                var others = document.querySelectorAll('audio');
+                for (var i = 0; i < others.length; i++) {
+                    if (others[i] !== audio && !others[i].paused) {
+                        others[i].pause();
+                    }
+                }
+            } catch (e) {}
         });
         audio.addEventListener('pause', function () {
             state.playing = false;
@@ -656,6 +671,22 @@
             if (state.currentTrack < state.playlist.length - 1) nextTrack();
             else pauseTrack();
         });
+
+        // Reverse coordination: when ANY OTHER <audio> on the page starts,
+        // pause ours. Listens in capture phase so we react before bubble
+        // handlers in the third-party player can fire. Same module
+        // boundary as the forward direction above — only one audio source
+        // is audible at any time, regardless of which player triggered it.
+        document.addEventListener('play', function (ev) {
+            try {
+                var t = ev && ev.target;
+                if (!t || t.tagName !== 'AUDIO') return;
+                if (t === audio) return;
+                if (audio && !audio.paused) {
+                    audio.pause();
+                }
+            } catch (e) {}
+        }, true);
 
         // Seek bar
         if (els.progressWrap) {
@@ -975,7 +1006,16 @@
                 containers: [container.selector],
                 animationSelector: false,
                 plugins: plugins,
-                linkSelector: 'a[href]:not([target="_blank"]):not([data-no-swup]):not([data-link-action]):not(.js-quick-view):not(.js-ajax-add-to-cart):not([href^="#"]):not([href^="javascript:"]):not([href^="mailto:"]):not([href^="tel:"])',
+                // Links the language selector renders carry `data-iso-code`
+                // (cf. modules/ps_languageselector/ps_languageselector.tpl
+                // in ZOneTheme). PrestaShop's `url entity='language'` helper
+                // produces URLs like `/?id_lang=N` rather than the path-
+                // prefix form `/fr/...` we detect in ignoreVisit, so Swup
+                // would otherwise try to swap into them and end up with a
+                // mismatched layout. Excluding them here forces a full
+                // reload — the only correct behaviour on language change
+                // anyway, since the entire shop content is re-rendered.
+                linkSelector: 'a[href]:not([target="_blank"]):not([data-no-swup]):not([data-link-action]):not([data-iso-code]):not(.js-quick-view):not(.js-ajax-add-to-cart):not([href^="#"]):not([href^="javascript:"]):not([href^="mailto:"]):not([href^="tel:"])',
                 ignoreVisit: function (url) {
                     try {
                         var u = new URL(url, window.location.origin);
