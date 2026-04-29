@@ -3,6 +3,34 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.10] — 2026-04-29
+
+### Fixed
+
+- **Pages produits / catégories apparaissent vides après navigation
+  Swup.** L'opérateur a confirmé qu'un `Ctrl+F5` ré-affiche correctement
+  la page : le contenu serveur est bon, c'est l'init JS qui manque
+  après le swap. ZOneTheme branche jQuery.lazyload sur `img.js-lazy`
+  une seule fois dans son `$(window).on('load', ...)` handler de
+  `_aonethememanager.js` (avec setTimeout 1000ms). Sur une fiche
+  produit, **tout le bloc détail** (cover, galerie, produits liés)
+  utilise des placeholders `js-lazy` qui ne se déclenchent jamais
+  après un swap → la page paraît vide.
+
+  Fix : nouvelle fonction `reinitLazyLoad($)` dans le preset zonetheme
+  qui ré-attache `$('img.js-lazy').lazyload({...})` après chaque
+  `content:replace` avec exactement les mêmes options que
+  ZOneTheme. Idempotent (les images déjà chargées perdent leur classe
+  `js-lazy` via le callback `load`). Trigger immédiat de `'appear'`
+  sur les images visibles dans le viewport pour qu'elles n'attendent
+  pas un scroll.
+
+### Telemetry
+
+L'event `orp:preset:invoked` rapporte maintenant `lazyImages: N`,
+le nombre d'images `img.js-lazy` qui ont été (ré-)attachées au plugin
+sur cette navigation.
+
 ## [2.4.9] — 2026-04-28
 
 ### Fixed

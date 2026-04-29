@@ -522,6 +522,59 @@
     }
 
     /* ============================================================ */
+    /*  LAZY LOAD (img.js-lazy)                                     */
+    /* ============================================================ */
+
+    /**
+     * ZOneTheme initialises jQuery.lazyload on `img.js-lazy` inside its
+     * single $(window).on('load',...) handler in _aonethememanager.js,
+     * with a 1s setTimeout. After a Swup swap, new pages contain fresh
+     * `img.js-lazy` placeholders that never get hooked — they stay as
+     * blank images until a hard reload. On a product page, the entire
+     * detail block (cover, gallery, related products) uses these
+     * placeholders, so the page LOOKS empty after Swup nav from the
+     * home (confirmed by the operator: Ctrl+F5 re-renders normally).
+     *
+     * Source: handleCookieMessage's load handler in
+     * _dev/js/aone/_aonethememanager.js:
+     *
+     *   $('img.js-lazy').lazyload({
+     *     failure_limit: 9999,
+     *     load: function(el, s) { $(this).removeClass('js-lazy'); }
+     *   });
+     *
+     * We mirror it here. Idempotent: jQuery.lazyload is safe to call
+     * multiple times on the same set; only newly added images get
+     * hooked up. The `removeClass('js-lazy')` in the load callback
+     * also ensures we won't re-process already-loaded images.
+     */
+    function reinitLazyLoad($) {
+        if (!$.fn || typeof $.fn.lazyload !== 'function') return 0;
+
+        var $imgs = $('img.js-lazy');
+        if (!$imgs.length) return 0;
+
+        try {
+            $imgs.lazyload({
+                failure_limit: 9999,
+                load: function () {
+                    $(this).removeClass('js-lazy');
+                }
+            });
+            // Trigger 'appear' on currently visible images so they load
+            // immediately rather than waiting for a scroll event.
+            $imgs.filter(function () {
+                var rect = this.getBoundingClientRect();
+                return rect.top < window.innerHeight && rect.bottom > 0;
+            }).trigger('appear');
+            return $imgs.length;
+        } catch (e) {
+            safeWarn('[ORP zonetheme] lazyload init threw:', e);
+            return 0;
+        }
+    }
+
+    /* ============================================================ */
     /*  PRESET ENTRY POINT                                          */
     /* ============================================================ */
 
@@ -566,6 +619,12 @@
         // success callback — won't show in this telemetry tick.
         var megamenuAjaxFired = reinitAjaxMegamenuContent($);
 
+        // Lazy-load on the new content (cover image, gallery, related
+        // products on a product page; product miniatures on category
+        // listings). Without this, the product detail block looks empty
+        // after Swup nav.
+        var lazyImagesHooked = reinitLazyLoad($);
+
         // Surface what actually fired so the diagnostic monitor can confirm
         // each step, and so we can spot a renamed selector in a future
         // ZOneTheme update before the customer notices.
@@ -579,6 +638,7 @@
                     featuredSliders:  sliders.featured,
                     stickyHeader:     stickyOk ? 1 : 0,
                     megamenuAjax:     megamenuAjaxFired ? 1 : 0,
+                    lazyImages:       lazyImagesHooked,
                     rtl:              rtl ? 1 : 0,
                 });
             } catch (e) {}
