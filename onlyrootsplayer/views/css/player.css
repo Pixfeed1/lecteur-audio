@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.4.2
+ * OnlyRoots Persistent Audio Player — v2.4.11
  *
  * Theme-agnostic stylesheet. All selectors are scoped under .orp-* classes
  * so this stylesheet never collides with the active theme.
@@ -309,6 +309,11 @@ body.orp-player-active {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    /* align-self: center keeps the button vertically centered with the
+       cart button when the parent (e.g. ZOneTheme's `.buttons-sections`)
+       is a flex container — without it some responsive breakpoints align
+       items to flex-start and our button drifts above the cart icon. */
+    align-self: center;
     width: var(--orp-btn-size);
     height: var(--orp-btn-size);
     padding: 0;
@@ -320,6 +325,7 @@ body.orp-player-active {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
     box-sizing: border-box;
     cursor: pointer;
+    flex: 0 0 auto;
     flex-shrink: 0;
     transition: background-color 0.15s ease, transform 0.1s ease;
     vertical-align: middle;

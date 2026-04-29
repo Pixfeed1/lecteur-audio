@@ -3,6 +3,22 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.11] — 2026-04-29
+
+### Fixed
+
+- **Bouton play "Écouter" décalé verticalement par rapport au bouton
+  panier sur certains breakpoints responsive.** Le wrapper qui contient
+  les deux boutons (`.buttons-sections` chez ZOneTheme) est un flex
+  container qui sur certains viewports utilise `align-items: flex-start`,
+  ce qui collait notre bouton au top tandis que le bouton panier (qui
+  a son propre `align-self`) restait centré → décalage vertical.
+
+  Fix : ajout de `align-self: center` et `flex: 0 0 auto` sur
+  `.orp-play-btn-inline` pour forcer le centrage vertical en flex
+  parent quel que soit le `align-items` du wrapper. Sans impact sur les
+  contextes non-flex (le `align-self` est juste ignoré).
+
 ## [2.4.10] — 2026-04-29
 
 ### Fixed
