@@ -168,3 +168,37 @@
         padding: 5px 6px;
     }
 }
+
+/* HHV-style play button styled to match the legacy Papp skin. */
+.product-description-short .orp-short-play-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: linear-gradient(to bottom, #6aa3e4 0%, #4a90e2 100%);
+    color: #fff;
+    border: 1px solid #357abd;
+    border-radius: 2px;
+    padding: 4px 10px;
+    margin: 0 0 8px 0;
+    font-size: 11px;
+    font-family: Arial, Helvetica, sans-serif;
+    cursor: pointer;
+    vertical-align: middle;
+}
+.product-description-short .orp-short-play-btn:hover {
+    background: linear-gradient(to bottom, #7eb1e8 0%, #5a9ce6 100%);
+}
+.product-description-short .orp-short-play-btn:active {
+    background: linear-gradient(to bottom, #4a90e2 0%, #6aa3e4 100%);
+}
+.product-description-short .orp-short-play-btn__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Cloned tracklist in the long description — Papp skin. */
+.product-description .orp-product-playlist--in-description {
+    margin-top: 12px;
+    margin-bottom: 6px;
+}

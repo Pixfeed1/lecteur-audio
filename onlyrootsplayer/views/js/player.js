@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.5.0
+ * OnlyRoots Persistent Audio Player — v2.5.1
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.5.0
+ * @version   2.5.1
  */
 (function () {
     'use strict';
@@ -807,7 +807,101 @@
         // Idempotent across re-runs: each <button> remembers it's bound via
         // a data flag, so re-init on Swup return doesn't double-bind.
         wireProductPlaylist();
+
+        // Mirror the playlist into the description areas the client asked
+        // for explicitly: a play button inside the short description (HHV
+        // style) and a copy of the full track list inside the long
+        // description (Juno style).
+        if (CONFIG.productPlaylistEnabled) {
+            injectPlaylistInShortDescription();
+            injectPlaylistInLongDescription();
+        }
+
         updateProductPlaylistPlayingState();
+    }
+
+    /**
+     * HHV-style: small play button injected at the start of the product
+     * short description. Clicking it loads the album and starts playback
+     * at the first track via the same code path as everything else.
+     * Idempotent — guarded by `data-orp-bound` on the inserted button so
+     * a Swup re-init doesn't insert a second one.
+     */
+    function injectPlaylistInShortDescription() {
+        var widget = document.querySelector('.orp-product-playlist[data-product-id]');
+        if (!widget) return;
+        var productId = parseInt(widget.getAttribute('data-product-id'), 10) || 0;
+        if (!productId) return;
+
+        var short = document.querySelector('.product-description-short');
+        if (!short) return;
+        if (short.querySelector('.orp-short-play-btn')) return;
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'orp-short-play-btn';
+        btn.setAttribute('data-orp-bound', '1');
+        btn.setAttribute('data-product-id', String(productId));
+        btn.setAttribute('data-no-swup', '');
+        btn.setAttribute('aria-label', L10N.listen);
+        btn.innerHTML =
+            '<span class="orp-short-play-btn__icon" aria-hidden="true">'
+            + '<svg width="14" height="14" viewBox="0 0 12 12">'
+            + '<polygon points="3,1 3,11 10,6" fill="currentColor"/>'
+            + '</svg></span>'
+            + '<span class="orp-short-play-btn__label">' + escapeHtml(L10N.listen) + '</span>';
+        btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            loadProductPlaylistAndPlay(productId, 0);
+        });
+
+        // Insert at the very start of the short description so it's the
+        // first thing readers see (matches HHV's placement).
+        short.insertBefore(btn, short.firstChild);
+    }
+
+    /**
+     * Juno-style: a copy of the full track list embedded inside the
+     * `.product-description` block (the long description tab). The clone
+     * is fully wired (calls wireProductPlaylist again so its buttons are
+     * active) and stays in sync with the persistent player's state via
+     * updateProductPlaylistPlayingState. Idempotent.
+     */
+    function injectPlaylistInLongDescription() {
+        var widget = document.querySelector('.orp-product-playlist[data-product-id]');
+        if (!widget) return;
+
+        var longDesc = document.querySelector('.product-description');
+        if (!longDesc) return;
+        // Skip the short-description container — the class name overlaps
+        // partially in some themes.
+        if (longDesc.classList.contains('product-description-short')) return;
+        if (longDesc.querySelector('.orp-product-playlist--in-description')) return;
+
+        var clone = widget.cloneNode(true);
+        clone.classList.add('orp-product-playlist--in-description');
+        // Reset bind flag so wireProductPlaylist picks it up — the data
+        // attribute was copied with the cloneNode.
+        clone.removeAttribute('data-orp-bound');
+        clone.querySelectorAll('[data-orp-bound]').forEach(function (el) {
+            el.removeAttribute('data-orp-bound');
+        });
+
+        longDesc.appendChild(clone);
+
+        // Wire the clone's buttons via the same generic wiring as the
+        // primary widget. Clean separation — no special-casing needed.
+        wireProductPlaylist();
+    }
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     /* ============================================================ */

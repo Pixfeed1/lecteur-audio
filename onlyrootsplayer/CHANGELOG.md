@@ -3,6 +3,44 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1] — 2026-04-29
+
+Two additional client requirements that were previously out-of-scope
+brought back into the deliverable: HHV-style play button in the short
+description AND Juno-style track list inside the long description.
+Both are JS-driven mirrors of the already-rendered playlist (no extra
+PHP hook, no theme template edit), so they activate on every product
+page automatically when CFG_REPLACE_PAPP_PLAYER is on.
+
+### Added — short description play button (HHV-style)
+
+A small "Écouter" button is injected at the very start of
+`.product-description-short` on every product page. Clicking it loads
+the product's full playlist into the persistent footer player and
+starts at track 0. Shape matches the active skin (rounded grey/dark
+in `orp` skin, gradient blue in `papp` skin). Idempotent across Swup
+re-runs via `data-orp-bound`.
+
+### Added — long description embedded tracklist (Juno-style)
+
+The `<div class="orp-product-playlist">` rendered by
+`hookDisplayProductPlaylistPlugin` is cloned into `.product-description`
+(the long description block ZOneTheme renders inside the "Description"
+tab in `_partials/product-description.tpl`). The clone wears an extra
+class `.orp-product-playlist--in-description` for skin-specific
+spacing and is fully wired via the same `wireProductPlaylist()` pass.
+State sync (highlighted current row) updates BOTH copies on every
+playback state change because `updateProductPlaylistPlayingState()`
+walks every `.orp-product-playlist` in the DOM.
+
+### Backwards compatibility
+
+Both injections are gated on `CONFIG.productPlaylistEnabled` (the
+config flag passed to JS via `Media::addJsDef` in
+`hookDisplayHeader`). Operators who keep `CFG_REPLACE_PAPP_PLAYER` off
+see no change — Papp's player remains the only audio source on the
+product page.
+
 ## [2.5.0] — 2026-04-29
 
 Major release: integrated product-page playlist that **replaces** the

@@ -179,3 +179,45 @@
         font-size: 0.875rem;
     }
 }
+
+/* HHV-style "Listen" button injected at the start of the product short
+   description. Visible match to the persistent player's accent so the
+   customer recognises it as audio playback, not a generic button. */
+.product-description-short .orp-short-play-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #1a1a1a;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    margin: 0 0 10px 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+.product-description-short .orp-short-play-btn:hover {
+    background: #e8a838;
+    color: #1a1a1a;
+}
+.product-description-short .orp-short-play-btn:active {
+    transform: scale(0.97);
+}
+.product-description-short .orp-short-play-btn__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Cloned tracklist that lives inside the long description (Juno-style).
+   No spacing tweaks needed beyond the marker class — the inherited styles
+   from the main `.orp-product-playlist[data-skin="orp"]` rules apply. */
+.product-description .orp-product-playlist--in-description {
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
