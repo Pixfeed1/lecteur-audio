@@ -562,6 +562,24 @@
                         } else {
                             anchor.appendChild(btn);
                         }
+                        // Match the sibling cart button's vertical metrics
+                        // so we sit exactly on the same baseline. ZOneTheme
+                        // applies `margin-top: 10px` to `.add-to-cart` in
+                        // certain grid contexts (.pg-bnl .product-list .grid)
+                        // — copying the cart button's computed margin-top
+                        // means the play button realigns automatically in
+                        // every responsive breakpoint, regardless of which
+                        // theme rule won the cascade. We only copy when
+                        // there's an actual non-zero margin to avoid pushing
+                        // the button down in contexts that don't need it.
+                        if (cartBtn) {
+                            try {
+                                var cartTopMargin = window.getComputedStyle(cartBtn).marginTop;
+                                if (cartTopMargin && cartTopMargin !== '0px') {
+                                    btn.style.marginTop = cartTopMargin;
+                                }
+                            } catch (e) {}
+                        }
                         card.classList.add('orp-has-audio');
                         return;
                     }

@@ -3,6 +3,29 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.12] — 2026-04-29
+
+### Fixed
+
+- **Bouton play encore décalé verticalement sur certains breakpoints
+  (iPhone 12 simulé, etc.) malgré le `align-self: center` de v2.4.11.**
+  Lecture directe du source ZOneTheme
+  (`_dev/css/components/products.scss` lignes 880-889) montre que
+  `.add-to-cart` reçoit `margin-top: 10px` dans le contexte
+  `.pg-bnl .product-list .grid .product-miniature .buttons-sections`
+  — donc la grille en mode listing sur certaines pages. Le margin
+  s'applique au bouton panier mais pas à mon bouton play, d'où le
+  décalage de 10 px exactement.
+
+  Plutôt que dupliquer le sélecteur ZOneTheme (fragile face aux
+  futures mises à jour du thème), `buildInlineButton` lit maintenant
+  via `window.getComputedStyle(cartBtn).marginTop` la valeur calculée
+  du bouton panier voisin et l'applique en inline style sur le bouton
+  play. Résultat : alignement parfait quel que soit le breakpoint /
+  contexte / version ZOneTheme. La copie n'a lieu que si le bouton
+  panier a effectivement un margin-top non-nul, pour ne pas pousser
+  notre bouton vers le bas dans les contextes qui n'en ont pas besoin.
+
 ## [2.4.11] — 2026-04-29
 
 ### Fixed
