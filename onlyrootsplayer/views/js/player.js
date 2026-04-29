@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.5.1
+ * OnlyRoots Persistent Audio Player — v2.5.2
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.5.1
+ * @version   2.5.2
  */
 (function () {
     'use strict';
@@ -808,13 +808,16 @@
         // a data flag, so re-init on Swup return doesn't double-bind.
         wireProductPlaylist();
 
-        // Mirror the playlist into the description areas the client asked
-        // for explicitly: a play button inside the short description (HHV
-        // style) and a copy of the full track list inside the long
-        // description (Juno style).
+        // Mirror the playlist into the description areas. We keep the HHV-
+        // style play button (small "Listen" button at the start of the short
+        // description) but DROPPED the Juno-style clone of the full track
+        // list inside the long description in v2.5.2: when a product had
+        // both a description and audio, the playlist was visible twice
+        // (operator-confirmed regression after the v2.5.2 release). The
+        // line-107 hook placement in product.tpl is already inside the
+        // description column, so it covers the Juno use case on its own.
         if (CONFIG.productPlaylistEnabled) {
             injectPlaylistInShortDescription();
-            injectPlaylistInLongDescription();
         }
 
         updateProductPlaylistPlayingState();
@@ -859,40 +862,6 @@
         // Insert at the very start of the short description so it's the
         // first thing readers see (matches HHV's placement).
         short.insertBefore(btn, short.firstChild);
-    }
-
-    /**
-     * Juno-style: a copy of the full track list embedded inside the
-     * `.product-description` block (the long description tab). The clone
-     * is fully wired (calls wireProductPlaylist again so its buttons are
-     * active) and stays in sync with the persistent player's state via
-     * updateProductPlaylistPlayingState. Idempotent.
-     */
-    function injectPlaylistInLongDescription() {
-        var widget = document.querySelector('.orp-product-playlist[data-product-id]');
-        if (!widget) return;
-
-        var longDesc = document.querySelector('.product-description');
-        if (!longDesc) return;
-        // Skip the short-description container — the class name overlaps
-        // partially in some themes.
-        if (longDesc.classList.contains('product-description-short')) return;
-        if (longDesc.querySelector('.orp-product-playlist--in-description')) return;
-
-        var clone = widget.cloneNode(true);
-        clone.classList.add('orp-product-playlist--in-description');
-        // Reset bind flag so wireProductPlaylist picks it up — the data
-        // attribute was copied with the cloneNode.
-        clone.removeAttribute('data-orp-bound');
-        clone.querySelectorAll('[data-orp-bound]').forEach(function (el) {
-            el.removeAttribute('data-orp-bound');
-        });
-
-        longDesc.appendChild(clone);
-
-        // Wire the clone's buttons via the same generic wiring as the
-        // primary widget. Clean separation — no special-casing needed.
-        wireProductPlaylist();
     }
 
     function escapeHtml(s) {

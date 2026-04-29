@@ -214,10 +214,3 @@
     justify-content: center;
 }
 
-/* Cloned tracklist that lives inside the long description (Juno-style).
-   No spacing tweaks needed beyond the marker class — the inherited styles
-   from the main `.orp-product-playlist[data-skin="orp"]` rules apply. */
-.product-description .orp-product-playlist--in-description {
-    margin-top: 16px;
-    margin-bottom: 8px;
-}

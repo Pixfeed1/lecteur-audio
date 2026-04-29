@@ -3,6 +3,73 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.2] — 2026-04-30
+
+Polish release based on direct client feedback after deploying 2.5.1.
+
+### Changed
+
+- **Removed the playlist header (button "Tout écouter" + "Écouter"
+  title) from `views/templates/hook/product-playlist.tpl`.** The HHV-
+  style "Listen" button injected at the start of the short description
+  in 2.5.1 already gives the user a one-click "play the album" entry
+  point, so the header on the playlist itself was visually redundant.
+  The track list now starts straight at track 1.
+- **Centred the play and pause icons inside the per-track buttons.**
+  The triangle was previously rendered with vertices at (3,1)(3,11)(10,6)
+  in a 12×12 viewBox, which sat 1 px too far right (apex at x=10 leaves
+  only 2 px to the right edge versus 3 px on the left). New polygon
+  `3,2 3,10 9,6` is symmetric in the 12×12 box. Pause bars also
+  re-centred (`x=2.5` and `x=7.5`, width 2 each) so the two icons share
+  the same optical centre.
+
+### Removed
+
+- **Duplicate playlist when the product has a long description.**
+  v2.5.1 cloned the `.orp-product-playlist` widget into
+  `.product-description` (the long description block ZOneTheme renders
+  in its "Description" tab) for a Juno-style placement. The client
+  reported the playlist appearing twice when the product also had a
+  description. The Juno placement is already covered by the line-107
+  hook position in `product.tpl` (it's inside the description column,
+  visible without scrolling). Removed `injectPlaylistInLongDescription`
+  and its CSS counterpart `.orp-product-playlist--in-description`.
+
+### Added — English translation
+
+`translations/en-US/ModulesOnlyrootsplayerShop.xlf` with FR→EN mappings
+for every user-facing Shop string. PrestaShop swaps to it automatically
+when the shop is set to English. Notably:
+
+- `Écouter` → `Play`
+- `Écouter un extrait` → `Listen to a sample`
+- `Tout écouter` → `Play all`
+- `Lecteur audio` → `Audio player`
+- ... and the rest of the player aria-labels.
+
+### Notes (no code change)
+
+- **Brevo chat button overlapping the persistent player**: the chat
+  widget is fixed-positioned at the bottom of the page, same DOM zone
+  as our player. Easy fix on the operator's side: in their custom CSS,
+  push the Brevo button up by the player height when the player is
+  active, e.g.
+  `.brevo-conversations-button { bottom: var(--orp-height, 72px) !important; }`
+  (replace `.brevo-conversations-button` with the actual selector
+  Brevo renders).
+- **Audio paused on `/fr/nous-contacter`**: the contact page is in
+  the Swup exclusion list since 2.4.3 (its non-standard layout used
+  to break the layout on swap-back; cf. v2.4.3 entry). Going there
+  is therefore a full reload, which kills audio playback. The persistent
+  player restores the playlist from `localStorage` so the previously
+  played track stays loaded — but browsers block autoplay without a
+  user gesture, so the user has to click play to resume. Working as
+  designed; documented for clarity.
+- **"Couldn't change pages" intermittent bug**: not reproducible by
+  the client. If it surfaces again, the operator can flip the BO
+  diagnostic monitor on, capture the log around the failure, and we
+  iterate from real telemetry instead of guesses.
+
 ## [2.5.1] — 2026-04-29
 
 Two additional client requirements that were previously out-of-scope

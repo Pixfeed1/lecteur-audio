@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.5.1
+ * @version   2.5.2
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -41,7 +41,7 @@ class OnlyRootsPlayer extends Module
     const CFG_MONITOR_ENABLED   = 'ORP_MONITOR_ENABLED';
 
     /* Integrated product playlist (replaces Papp's own player on product
-       pages — see CHANGELOG 2.5.1 for the full rationale). */
+       pages — see CHANGELOG 2.5.2 for the full rationale). */
     const CFG_REPLACE_PAPP_PLAYER  = 'ORP_REPLACE_PAPP_PLAYER';   // 0|1, default 0
     const CFG_PRODUCT_PLAYER_SKIN  = 'ORP_PRODUCT_PLAYER_SKIN';   // 'orp' | 'papp'
     const CFG_PAPP_HOOK_REMOVED    = 'ORP_PAPP_HOOK_REMOVED';     // internal flag
@@ -80,7 +80,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.5.1';
+        $this->version          = '2.5.2';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -137,7 +137,7 @@ class OnlyRootsPlayer extends Module
             self::CFG_WATCHDOG_MS       => self::DEFAULT_WATCHDOG_MS,
             self::CFG_POST_SWAP_JS      => '',
             // SAFE DEFAULT: 'none' until we have a confirmed root cause and
-            // staging-validated fix for the v2.5.1 production breakage. Operators
+            // staging-validated fix for the v2.5.2 production breakage. Operators
             // on ZOneTheme must opt in via BO after testing in staging with the
             // F12 console open to capture any reinit-related errors.
             self::CFG_THEME_PRESET      => self::THEME_PRESET_NONE,
@@ -329,7 +329,7 @@ class OnlyRootsPlayer extends Module
 
         // getAdminLink(..., true) appends the admin token. Without it, PrestaShop's
         // CSRF middleware rejects the POST with a "CLÉ DE SÉCURITÉ INVALIDE"
-        // page (observed in v2.5.1 production when an operator clicked
+        // page (observed in v2.5.2 production when an operator clicked
         // "Vider le log").
         $action = htmlspecialchars(
             $this->context->link->getAdminLink('AdminModules', true)
@@ -939,7 +939,7 @@ class OnlyRootsPlayer extends Module
      *   <div class="mt-3 mb-3">{hook h='DisplayProductPlaylistPlugin' product=$product}</div>
      * which invokes this hook on every product page. Both Papp and our
      * module are registered on the hook (Papp at install time, ours at
-     * 2.5.1 install via PAPP_DISPLAY_HOOK in install()). When CFG_REPLACE_PAPP_PLAYER=1
+     * 2.5.2 install via PAPP_DISPLAY_HOOK in install()). When CFG_REPLACE_PAPP_PLAYER=1
      * we have additionally unregistered Papp from the hook so only our
      * output remains.
      *
@@ -1358,7 +1358,7 @@ PHP;
         // sometimes diverge from the standard layout (no megamenu, different
         // wrapper structure), and Swup ends up with a half-swapped page
         // missing the header/footer (observed on OnlyRoots Reggae /
-        // ZOneTheme on /fr/nous-contacter — captured in the v2.5.1 monitor
+        // ZOneTheme on /fr/nous-contacter — captured in the v2.5.2 monitor
         // log).
         $pageNames = [
             'cart', 'order', 'order-confirmation', 'authentication',
