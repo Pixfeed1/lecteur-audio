@@ -3,6 +3,49 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.13] — 2026-04-29
+
+### Fixed (real fix this time)
+
+- **Pages cassées (vides) après navigation Swup, encore.** Le v2.4.10
+  était censé fixer ça via jQuery.lazyload mais le monitor v2.4.12
+  capturait `lazyImages=0` partout — ce qui veut dire que mon code
+  retournait 0 silencieusement à chaque fois. Cause : `$.fn.lazyload`
+  est **webpack-scopé** dans le bundle ZOneTheme (comme NivoSlider
+  pour le hero) — le plugin n'est pas exposé sur le `window.jQuery`
+  global, donc mon `if (typeof $.fn.lazyload !== 'function') return 0;`
+  bailait toujours. Le fix v2.4.10 n'a jamais effectivement tourné en
+  prod malgré l'apparence.
+
+  Nouveau fix : remplacement complet de `reinitLazyLoad` par une
+  version qui ne dépend d'aucun plugin. Lecture directe de
+  l'attribut `data-original` (la convention legacy jQuery.lazyload
+  qu'utilise ZOneTheme — confirmé via grep sur
+  `modules/zoneslideshow/.../banners.tpl`) et swap manuel dans
+  `img.src`. Retire la classe `js-lazy` après swap pour idempotence.
+
+  Conséquence : les images des pages produits, fiches catégorie, et
+  toute autre page qui utilise `img.js-lazy` se chargent maintenant
+  immédiatement après chaque swap Swup, sans dépendre de la présence
+  du plugin externe.
+
+### Telemetry
+
+`orp:preset:invoked` continue de rapporter `lazyImages=N`. Cette fois
+c'est le compteur réel d'images dont on a swappé `data-original` →
+`src` à cette nav, donc tu devrais voir des valeurs > 0 sur les pages
+qui utilisent des images lazy.
+
+### Note sur les erreurs `setControlsSize`
+
+Le log v2.4.12 montrait aussi du spam `Uncaught TypeError: Cannot
+read properties of undefined (reading 'setControlsSize')` sur les
+fiches produit. C'est jQuery elevateZoom (le zoom sur image produit)
+qui ne se ré-initialise pas après un swap. Pas critique pour le
+rendu de la page (juste le zoom au survol qui ne marche plus, mais
+l'image elle-même s'affiche). À traiter dans une prochaine itération
+si besoin.
+
 ## [2.4.12] — 2026-04-29
 
 ### Fixed

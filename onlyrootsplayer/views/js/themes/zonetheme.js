@@ -527,51 +527,52 @@
 
     /**
      * ZOneTheme initialises jQuery.lazyload on `img.js-lazy` inside its
-     * single $(window).on('load',...) handler in _aonethememanager.js,
-     * with a 1s setTimeout. After a Swup swap, new pages contain fresh
-     * `img.js-lazy` placeholders that never get hooked — they stay as
-     * blank images until a hard reload. On a product page, the entire
-     * detail block (cover, gallery, related products) uses these
-     * placeholders, so the page LOOKS empty after Swup nav from the
-     * home (confirmed by the operator: Ctrl+F5 re-renders normally).
+     * single $(window).on('load',...) handler in _aonethememanager.js
+     * (with a 1s setTimeout). After a Swup swap, new pages contain fresh
+     * `img.js-lazy` placeholders that never get hooked.
      *
-     * Source: handleCookieMessage's load handler in
-     * _dev/js/aone/_aonethememanager.js:
+     * IMPORTANT: $.fn.lazyload is webpack-scoped in ZOneTheme's bundle
+     * (the v2.4.12 monitor capture confirmed `lazyImages=0` in every
+     * orp:preset:invoked event — the plugin call returned 0 silently
+     * because the global jQuery doesn't expose the plugin). So we don't
+     * call the plugin at all. Instead we mimic its behaviour directly:
+     * read `data-original` (or `data-src` as a fallback for less
+     * legacy themes) and swap it into `src`.
      *
-     *   $('img.js-lazy').lazyload({
-     *     failure_limit: 9999,
-     *     load: function(el, s) { $(this).removeClass('js-lazy'); }
-     *   });
+     * Source attribute confirmed via grep on
+     * modules/zoneslideshow/.../banners.tpl:
      *
-     * We mirror it here. Idempotent: jQuery.lazyload is safe to call
-     * multiple times on the same set; only newly added images get
-     * hooked up. The `removeClass('js-lazy')` in the load callback
-     * also ensures we won't re-process already-loaded images.
+     *     data-original = "{$image_baseurl}{$aslide.image}"
+     *     class = "img-fluid js-lazy"
+     *
+     * Idempotent across swaps: once an image's `src` matches its
+     * `data-original`, we skip it. The `js-lazy` class is removed so a
+     * second pass doesn't reprocess. Returns the count of images we
+     * actually swapped this run (for telemetry).
      */
     function reinitLazyLoad($) {
-        if (!$.fn || typeof $.fn.lazyload !== 'function') return 0;
-
         var $imgs = $('img.js-lazy');
         if (!$imgs.length) return 0;
 
-        try {
-            $imgs.lazyload({
-                failure_limit: 9999,
-                load: function () {
-                    $(this).removeClass('js-lazy');
+        var swapped = 0;
+        $imgs.each(function () {
+            try {
+                var img = this;
+                var src = img.getAttribute('data-original') || img.getAttribute('data-src');
+                if (!src) return;
+                if (img.getAttribute('src') === src) {
+                    // Already at final src — just clean the class.
+                    img.classList.remove('js-lazy');
+                    return;
                 }
-            });
-            // Trigger 'appear' on currently visible images so they load
-            // immediately rather than waiting for a scroll event.
-            $imgs.filter(function () {
-                var rect = this.getBoundingClientRect();
-                return rect.top < window.innerHeight && rect.bottom > 0;
-            }).trigger('appear');
-            return $imgs.length;
-        } catch (e) {
-            safeWarn('[ORP zonetheme] lazyload init threw:', e);
-            return 0;
-        }
+                img.setAttribute('src', src);
+                img.classList.remove('js-lazy');
+                swapped++;
+            } catch (e) {
+                safeWarn('[ORP zonetheme] lazyload swap threw:', e);
+            }
+        });
+        return swapped;
     }
 
     /* ============================================================ */
