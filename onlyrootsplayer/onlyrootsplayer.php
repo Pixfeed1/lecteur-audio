@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.4.14
+ * @version   2.5.0
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -40,6 +40,20 @@ class OnlyRootsPlayer extends Module
     const CFG_THEME_PRESET      = 'ORP_THEME_PRESET';
     const CFG_MONITOR_ENABLED   = 'ORP_MONITOR_ENABLED';
 
+    /* Integrated product playlist (replaces Papp's own player on product
+       pages — see CHANGELOG 2.5.0 for the full rationale). */
+    const CFG_REPLACE_PAPP_PLAYER  = 'ORP_REPLACE_PAPP_PLAYER';   // 0|1, default 0
+    const CFG_PRODUCT_PLAYER_SKIN  = 'ORP_PRODUCT_PLAYER_SKIN';   // 'orp' | 'papp'
+    const CFG_PAPP_HOOK_REMOVED    = 'ORP_PAPP_HOOK_REMOVED';     // internal flag
+    const CFG_PAPP_HOOK_POSITION   = 'ORP_PAPP_HOOK_POSITION';    // saved for restore
+
+    const SKIN_ORP                 = 'orp';
+    const SKIN_PAPP                = 'papp';
+    const VALID_SKINS              = [self::SKIN_ORP, self::SKIN_PAPP];
+
+    /** Hook the third-party Papp module renders on (case-insensitive in PS). */
+    const PAPP_DISPLAY_HOOK        = 'displayProductPlaylistPlugin';
+
     /* Defaults — written on install, restorable from BO */
     const DEFAULT_CONTAINER         = '#content-wrapper, #content, main, #main';
     const DEFAULT_PRODUCT_SELECTORS = '.js-product-miniature[data-id-product], .product-miniature[data-id-product], article.product[data-id-product]';
@@ -66,7 +80,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.4.14';
+        $this->version          = '2.5.0';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -123,11 +137,17 @@ class OnlyRootsPlayer extends Module
             self::CFG_WATCHDOG_MS       => self::DEFAULT_WATCHDOG_MS,
             self::CFG_POST_SWAP_JS      => '',
             // SAFE DEFAULT: 'none' until we have a confirmed root cause and
-            // staging-validated fix for the v2.4.14 production breakage. Operators
+            // staging-validated fix for the v2.5.0 production breakage. Operators
             // on ZOneTheme must opt in via BO after testing in staging with the
             // F12 console open to capture any reinit-related errors.
             self::CFG_THEME_PRESET      => self::THEME_PRESET_NONE,
             self::CFG_MONITOR_ENABLED   => 0,
+            // Off by default on upgrades — the operator opts in via BO so
+            // we never silently swap out Papp's player on existing installs.
+            self::CFG_REPLACE_PAPP_PLAYER => 0,
+            self::CFG_PRODUCT_PLAYER_SKIN => self::SKIN_ORP,
+            self::CFG_PAPP_HOOK_REMOVED   => 0,
+            self::CFG_PAPP_HOOK_POSITION  => 0,
         ];
         // updateValue is an upsert — existing 2.0.0 installs keep their values,
         // only the new keys (e.g. WATCHDOG_MS) get the default written.
@@ -149,11 +169,25 @@ class OnlyRootsPlayer extends Module
             && $this->registerHook('actionObjectPappAudioPlaylistAddAfter')
             && $this->registerHook('actionObjectPappAudioPlaylistUpdateAfter')
             && $this->registerHook('actionObjectPappAudioPlaylistDeleteAfter')
-            && $this->registerHook('actionAdminControllerInitAfter');
+            && $this->registerHook('actionAdminControllerInitAfter')
+            // Pre-register on Papp's display hook so we're ready to be
+            // invoked there when the operator enables CFG_REPLACE_PAPP_PLAYER.
+            // Idempotent: registering twice is a no-op.
+            && $this->registerHook(self::PAPP_DISPLAY_HOOK);
     }
 
     public function uninstall()
     {
+        // CRITICAL: restore Papp's own hook before we vanish, otherwise the
+        // shop is left with an unhooked third-party module and no integrated
+        // playlist (since we're being removed). Same call we use when the
+        // operator toggles CFG_REPLACE_PAPP_PLAYER off in the BO.
+        try {
+            $this->disablePappReplacement();
+        } catch (Exception $e) {
+            // Never block the uninstall on a hook restore — log and move on.
+        }
+
         $keys = [
             self::CFG_SWUP_ENABLED,
             self::CFG_SWUP_CONTAINER,
@@ -167,6 +201,10 @@ class OnlyRootsPlayer extends Module
             self::CFG_POST_SWAP_JS,
             self::CFG_THEME_PRESET,
             self::CFG_MONITOR_ENABLED,
+            self::CFG_REPLACE_PAPP_PLAYER,
+            self::CFG_PRODUCT_PLAYER_SKIN,
+            self::CFG_PAPP_HOOK_REMOVED,
+            self::CFG_PAPP_HOOK_POSITION,
         ];
         foreach ($keys as $k) {
             Configuration::deleteByName($k);
@@ -291,7 +329,7 @@ class OnlyRootsPlayer extends Module
 
         // getAdminLink(..., true) appends the admin token. Without it, PrestaShop's
         // CSRF middleware rejects the POST with a "CLÉ DE SÉCURITÉ INVALIDE"
-        // page (observed in v2.4.14 production when an operator clicked
+        // page (observed in v2.5.0 production when an operator clicked
         // "Vider le log").
         $action = htmlspecialchars(
             $this->context->link->getAdminLink('AdminModules', true)
@@ -349,6 +387,12 @@ class OnlyRootsPlayer extends Module
             $watchdog = self::DEFAULT_WATCHDOG_MS;
         }
 
+        $skinIn = (string) Tools::getValue(self::CFG_PRODUCT_PLAYER_SKIN);
+        $skin   = in_array($skinIn, self::VALID_SKINS, true) ? $skinIn : self::SKIN_ORP;
+
+        $newReplaceFlag = (int) Tools::getValue(self::CFG_REPLACE_PAPP_PLAYER);
+        $oldReplaceFlag = (int) Configuration::get(self::CFG_REPLACE_PAPP_PLAYER);
+
         $values = [
             self::CFG_SWUP_ENABLED      => (int) Tools::getValue(self::CFG_SWUP_ENABLED),
             self::CFG_SWUP_CONTAINER    => trim((string) Tools::getValue(self::CFG_SWUP_CONTAINER)),
@@ -365,6 +409,8 @@ class OnlyRootsPlayer extends Module
             self::CFG_POST_SWAP_JS      => (string) Tools::getValue(self::CFG_POST_SWAP_JS),
             self::CFG_THEME_PRESET      => $this->sanitizeThemePreset(Tools::getValue(self::CFG_THEME_PRESET)),
             self::CFG_MONITOR_ENABLED   => (int) Tools::getValue(self::CFG_MONITOR_ENABLED),
+            self::CFG_REPLACE_PAPP_PLAYER => $newReplaceFlag,
+            self::CFG_PRODUCT_PLAYER_SKIN => $skin,
         ];
 
         // Restore defaults on empty fields rather than letting the front break
@@ -380,6 +426,27 @@ class OnlyRootsPlayer extends Module
 
         foreach ($values as $key => $val) {
             Configuration::updateValue($key, $val);
+        }
+
+        // React to a transition of the Papp-replacement toggle. Doing this
+        // after the bulk Configuration::updateValue loop means our helpers
+        // see the new flag value when they read Configuration::get inside.
+        if ($newReplaceFlag !== $oldReplaceFlag) {
+            try {
+                if ($newReplaceFlag === 1) {
+                    $this->enablePappReplacement();
+                } else {
+                    $this->disablePappReplacement();
+                }
+            } catch (Exception $e) {
+                return $this->displayError(
+                    $this->trans(
+                        'Paramètres enregistrés, mais une erreur est survenue lors de l\'application du remplacement du lecteur Papp : %error%',
+                        ['%error%' => $e->getMessage()],
+                        'Modules.Onlyrootsplayer.Admin'
+                    )
+                );
+            }
         }
 
         return $this->displayConfirmation(
@@ -529,6 +596,27 @@ class OnlyRootsPlayer extends Module
                         'cols'  => 80,
                         'rows'  => 8,
                     ],
+                    [
+                        'type'    => 'switch',
+                        'label'   => $this->tAdmin('Remplacer le lecteur Papp sur la fiche produit'),
+                        'name'    => self::CFG_REPLACE_PAPP_PLAYER,
+                        'desc'    => $this->tAdmin('Quand activé, le lecteur du module « productaudioplaylistplugin » est désenregistré du hook displayProductPlaylistPlugin et remplacé par notre lecteur intégré (liste de pistes + bouton play par piste, qui transfèrent la lecture dans le lecteur persistant en bas de page). Désactivable à tout moment : Papp est ré-enregistré à sa position d\'origine.'),
+                        'is_bool' => true,
+                        'values'  => [
+                            ['id' => 'replace_papp_on',  'value' => 1, 'label' => $this->tAdmin('Activé')],
+                            ['id' => 'replace_papp_off', 'value' => 0, 'label' => $this->tAdmin('Désactivé')],
+                        ],
+                    ],
+                    [
+                        'type'    => 'radio',
+                        'label'   => $this->tAdmin('Apparence du lecteur intégré'),
+                        'name'    => self::CFG_PRODUCT_PLAYER_SKIN,
+                        'desc'    => $this->tAdmin('Choisissez le style visuel du lecteur intégré sur la fiche produit. Le mode « Classique » reproduit l\'apparence de l\'ancien lecteur Papp pour une transition invisible côté client.'),
+                        'values'  => [
+                            ['id' => 'skin_orp',  'value' => self::SKIN_ORP,  'label' => $this->tAdmin('Moderne (style OnlyRoots)')],
+                            ['id' => 'skin_papp', 'value' => self::SKIN_PAPP, 'label' => $this->tAdmin('Classique (style ancien lecteur Papp)')],
+                        ],
+                    ],
                 ],
                 'submit' => [
                     'title' => $this->tAdmin('Enregistrer'),
@@ -573,7 +661,19 @@ class OnlyRootsPlayer extends Module
             self::CFG_POST_SWAP_JS      => (string) Configuration::get(self::CFG_POST_SWAP_JS),
             self::CFG_THEME_PRESET      => $this->getThemePreset(),
             self::CFG_MONITOR_ENABLED   => (int) Configuration::get(self::CFG_MONITOR_ENABLED),
+            self::CFG_REPLACE_PAPP_PLAYER => (int) Configuration::get(self::CFG_REPLACE_PAPP_PLAYER),
+            self::CFG_PRODUCT_PLAYER_SKIN => $this->getProductPlayerSkin(),
         ];
+    }
+
+    /**
+     * Returns the configured product-page playlist skin, defaulting to
+     * SKIN_ORP and clamped to VALID_SKINS.
+     */
+    private function getProductPlayerSkin()
+    {
+        $stored = (string) Configuration::get(self::CFG_PRODUCT_PLAYER_SKIN);
+        return in_array($stored, self::VALID_SKINS, true) ? $stored : self::SKIN_ORP;
     }
 
     /* ============================================================ */
@@ -703,6 +803,24 @@ class OnlyRootsPlayer extends Module
             ['media' => 'all', 'priority' => 200, 'version' => $cssVer]
         );
 
+        // Skin CSS for the integrated product-page playlist — only when the
+        // operator has enabled the Papp replacement mode AND we're rendering
+        // the playlist. We register on every front page (not just product
+        // pages) because Swup's content swap brings the playlist markup
+        // into the same DOM that the initial-load <head> sees.
+        if ((int) Configuration::get(self::CFG_REPLACE_PAPP_PLAYER) === 1) {
+            $skin       = $this->getProductPlayerSkin();
+            $skinFile   = 'views/css/product-playlist-skin-' . $skin . '.css';
+            $skinPath   = $modulePath . $skinFile;
+            if (file_exists($skinPath)) {
+                $this->context->controller->registerStylesheet(
+                    'onlyrootsplayer-product-playlist-' . $skin,
+                    'modules/' . $this->name . '/' . $skinFile,
+                    ['media' => 'all', 'priority' => 205, 'version' => $this->fileVersion($skinPath)]
+                );
+            }
+        }
+
         // Swup libs (only if Swup is enabled for this request)
         if ($this->isSwupEnabledForCurrentRequest()) {
             $base = 'modules/' . $this->name . '/views/js/lib/';
@@ -790,6 +908,8 @@ class OnlyRootsPlayer extends Module
                 'themePreset'      => $this->getThemePreset(),
                 'monitorEnabled'   => (int) Configuration::get(self::CFG_MONITOR_ENABLED) === 1,
                 'monitorEndpoint'  => $this->context->link->getModuleLink($this->name, 'monitor'),
+                'productPlaylistEnabled' => (int) Configuration::get(self::CFG_REPLACE_PAPP_PLAYER) === 1,
+                'productPlaylistSkin'    => $this->getProductPlayerSkin(),
                 'debug'            => $debug,
             ],
             'onlyrootsPlayerL10n' => [
@@ -808,6 +928,75 @@ class OnlyRootsPlayer extends Module
             return '';
         }
         return $this->fetch('module:' . $this->name . '/views/templates/hook/player-footer.tpl');
+    }
+
+    /**
+     * Renders the integrated product-page playlist that REPLACES Papp's
+     * `<audio>` element + MediaElement.js player when the operator has
+     * enabled CFG_REPLACE_PAPP_PLAYER.
+     *
+     * Wiring: ZOneTheme's `templates/catalog/product.tpl` line 107 contains
+     *   <div class="mt-3 mb-3">{hook h='DisplayProductPlaylistPlugin' product=$product}</div>
+     * which invokes this hook on every product page. Both Papp and our
+     * module are registered on the hook (Papp at install time, ours at
+     * 2.5.0 install via PAPP_DISPLAY_HOOK in install()). When CFG_REPLACE_PAPP_PLAYER=1
+     * we have additionally unregistered Papp from the hook so only our
+     * output remains.
+     *
+     * Returns '' when:
+     *   - Replacement mode is off (no-op)
+     *   - The product has no audio entries in papp_audio_playlist
+     *   - The hook is invoked outside a product context (no $product param)
+     */
+    public function hookDisplayProductPlaylistPlugin($params)
+    {
+        if ((int) Configuration::get(self::CFG_REPLACE_PAPP_PLAYER) !== 1) {
+            return '';
+        }
+        if (!self::audioSourceAvailable()) {
+            return '';
+        }
+
+        $idProduct = 0;
+        if (!empty($params['product'])) {
+            $product = $params['product'];
+            if (is_array($product) && isset($product['id_product'])) {
+                $idProduct = (int) $product['id_product'];
+            } elseif (is_object($product) && isset($product->id_product)) {
+                $idProduct = (int) $product->id_product;
+            } elseif (is_object($product) && isset($product->id)) {
+                $idProduct = (int) $product->id;
+            }
+        }
+        if ($idProduct <= 0) {
+            return '';
+        }
+
+        $tracks = self::getProductTracks($idProduct);
+        if (empty($tracks)) {
+            return '';
+        }
+
+        $skin = Configuration::get(self::CFG_PRODUCT_PLAYER_SKIN);
+        if (!in_array($skin, self::VALID_SKINS, true)) {
+            $skin = self::SKIN_ORP;
+        }
+
+        $cacheId = $this->getCacheId(
+            'orp_product_playlist_' . $idProduct . '_' . $skin
+        );
+
+        $this->context->smarty->assign([
+            'orp_product_id'        => $idProduct,
+            'orp_product_tracks'    => $tracks,
+            'orp_playlist_skin'     => $skin,
+            'orp_playlist_track_count' => count($tracks),
+        ]);
+
+        return $this->fetch(
+            'module:' . $this->name . '/views/templates/hook/product-playlist.tpl',
+            $cacheId
+        );
     }
 
     /* ============================================================ */
@@ -836,12 +1025,44 @@ class OnlyRootsPlayer extends Module
     }
 
     /**
-     * Fallback: when an admin loads any controller that belongs to the Papp
-     * module, invalidate our cache. This catches cases where Papp performs
-     * raw SQL operations and never fires actionObjectPappAudioPlaylist*.
+     * Two-purpose hook on every BO admin controller init:
+     *
+     *   1. When the admin loads a Papp-related controller, invalidate the
+     *      `orp_with_audio_*` cache (catches cases where Papp performs raw
+     *      SQL and never fires actionObjectPappAudioPlaylist*).
+     *
+     *   2. LAYER 2 of the Papp-replacement defence: if the operator has
+     *      enabled CFG_REPLACE_PAPP_PLAYER and Papp has somehow been
+     *      re-registered on PAPP_DISPLAY_HOOK (cache clear, module reset,
+     *      manual re-hook in BO → Module Positions, etc.), unregister it
+     *      again. Catches any administrative action that re-attaches
+     *      Papp behind our back.
      */
     public function hookActionAdminControllerInitAfter($params)
     {
+        // ── Layer 2 watcher (runs on every admin controller init) ──
+        try {
+            if ((int) Configuration::get(self::CFG_REPLACE_PAPP_PLAYER) === 1
+                && $this->getPappCurrentHookPosition() > 0) {
+                // Papp is hooked again — undo it.
+                $pappModule = Module::getInstanceByName(self::AUDIO_SOURCE_MODULE);
+                if ($pappModule) {
+                    $idHook = (int) Hook::getIdByName(self::PAPP_DISPLAY_HOOK);
+                    if ($idHook > 0) {
+                        $pappModule->unregisterHook($idHook);
+                    }
+                }
+                // Also re-install the override file in case it was removed
+                // (some module-update flows rebuild /override/).
+                if (!is_file($this->getPappOverrideFilePath())) {
+                    $this->installPappOverride();
+                }
+            }
+        } catch (Exception $e) {
+            // never block admin requests on watcher errors
+        }
+
+        // ── Cache invalidation when on a Papp-related admin page ──
         if (empty($params['controller'])) {
             return;
         }
@@ -877,6 +1098,237 @@ class OnlyRootsPlayer extends Module
     }
 
     /* ============================================================ */
+    /*  PAPP REPLACEMENT — 3-LAYER DEFENCE                          */
+    /* ============================================================ */
+    /*
+     *  Layer 1: at toggle ON, we unregister Papp from PAPP_DISPLAY_HOOK
+     *           and our module takes over (we registered on the same hook
+     *           at install time so we're already a candidate).
+     *  Layer 2: on every BO admin controller init we re-check that Papp
+     *           is still unhooked from PAPP_DISPLAY_HOOK; if Papp self-
+     *           re-registered (cache clear, module reset, etc.) we undo
+     *           it again.
+     *  Layer 3: a file-level override at /override/modules/.../X.php
+     *           short-circuits Papp::hookDisplayProductPlaylistPlugin to
+     *           return '' even if Papp manages to be hooked. Belt-and-
+     *           suspenders for the small race window where layer 2 hasn't
+     *           fired yet.
+     */
+
+    /**
+     * Reads the hook position stored in `ps_hook_module` for the third-party
+     * Papp module on the PAPP_DISPLAY_HOOK hook. Returns 0 when Papp is not
+     * registered there (which is the post-takeover steady state).
+     */
+    private function getPappCurrentHookPosition()
+    {
+        $idHook = (int) Hook::getIdByName(self::PAPP_DISPLAY_HOOK);
+        $idMod  = (int) Module::getModuleIdByName(self::AUDIO_SOURCE_MODULE);
+        if ($idHook <= 0 || $idMod <= 0) {
+            return 0;
+        }
+        $row = Db::getInstance()->getValue(
+            'SELECT position FROM ' . _DB_PREFIX_ . 'hook_module
+             WHERE id_hook = ' . $idHook . ' AND id_module = ' . $idMod
+        );
+        return (int) $row;
+    }
+
+    /**
+     * Installs the layered defence:
+     *   1. Snapshot Papp's current hook position so we can restore it later.
+     *   2. Unregister Papp from PAPP_DISPLAY_HOOK.
+     *   3. Make sure our module is registered on PAPP_DISPLAY_HOOK.
+     *   4. Drop the override file at /override/modules/.../X.php.
+     *   5. Bump the class_index cache so PS picks up the override.
+     *   6. Flush Smarty cache so Papp's now-empty render is reflected.
+     *
+     * Idempotent: calling twice is safe.
+     */
+    private function enablePappReplacement()
+    {
+        $pappModule = Module::getInstanceByName(self::AUDIO_SOURCE_MODULE);
+        if (!$pappModule) {
+            // Papp not installed at all — nothing to take over from. Still
+            // register ourselves on the hook in case Papp gets installed
+            // later: registering again is a no-op.
+            $this->registerHook(self::PAPP_DISPLAY_HOOK);
+            Configuration::updateValue(self::CFG_PAPP_HOOK_REMOVED, 1);
+            return;
+        }
+
+        // 1. Snapshot the current Papp position (only if non-zero — a zero
+        //    means Papp is already unhooked, no useful snapshot to take).
+        $currentPos = $this->getPappCurrentHookPosition();
+        if ($currentPos > 0) {
+            Configuration::updateValue(self::CFG_PAPP_HOOK_POSITION, $currentPos);
+        }
+
+        // 2. Unregister Papp from the hook.
+        try {
+            $idHook = (int) Hook::getIdByName(self::PAPP_DISPLAY_HOOK);
+            if ($idHook > 0) {
+                $pappModule->unregisterHook($idHook);
+            }
+        } catch (Exception $e) {
+            // proceed even if the unregister fails — layers 2 + 3 still apply
+        }
+
+        // 3. Make sure WE are registered on the hook so our hookDisplayXxx
+        //    method gets invoked.
+        $this->registerHook(self::PAPP_DISPLAY_HOOK);
+
+        Configuration::updateValue(self::CFG_PAPP_HOOK_REMOVED, 1);
+
+        // 4 + 5. Drop the override and refresh class_index.
+        $this->installPappOverride();
+
+        // 6. Smarty cache.
+        try {
+            Tools::clearSmartyCache();
+        } catch (Exception $e) {}
+    }
+
+    /**
+     * Reverses enablePappReplacement(): deletes the override, re-registers
+     * Papp on the hook at its original position (best effort), and drops
+     * the cached Smarty templates.
+     */
+    private function disablePappReplacement()
+    {
+        $this->removePappOverride();
+
+        $pappModule = Module::getInstanceByName(self::AUDIO_SOURCE_MODULE);
+        if ($pappModule) {
+            try {
+                $pappModule->registerHook(self::PAPP_DISPLAY_HOOK);
+                $savedPos = (int) Configuration::get(self::CFG_PAPP_HOOK_POSITION);
+                if ($savedPos > 0) {
+                    // updatePosition expects (id_hook, way, position). way=0
+                    // means "move to the absolute target position".
+                    $idHook = (int) Hook::getIdByName(self::PAPP_DISPLAY_HOOK);
+                    if ($idHook > 0) {
+                        $pappModule->updatePosition($idHook, 0, $savedPos);
+                    }
+                }
+            } catch (Exception $e) {}
+        }
+
+        Configuration::updateValue(self::CFG_PAPP_HOOK_REMOVED, 0);
+
+        try {
+            Tools::clearSmartyCache();
+        } catch (Exception $e) {}
+    }
+
+    /**
+     * Filesystem path to the Papp module override we install.
+     */
+    private function getPappOverrideFilePath()
+    {
+        return _PS_OVERRIDE_DIR_ . 'modules/' . self::AUDIO_SOURCE_MODULE . '/'
+            . self::AUDIO_SOURCE_MODULE . '.php';
+    }
+
+    /**
+     * Writes the override file that short-circuits Papp's hook return value.
+     * Even if Papp re-registers itself on the hook between our watcher's
+     * tick and a customer's pageview, the override forces an empty return,
+     * so the hook never produces visible HTML.
+     *
+     * Standard PrestaShop module-override pattern: a class with the same
+     * name as the original module, in /override/modules/{module}/{module}.php.
+     * PS's autoloader replaces the original class with our extended version.
+     */
+    private function installPappOverride()
+    {
+        $path = $this->getPappOverrideFilePath();
+        $dir  = dirname($path);
+
+        // Conflict check: another module may have already installed an
+        // override here (rare, but possible). Don't clobber — log and
+        // fall back to layers 1 + 2 only.
+        if (is_file($path)) {
+            $existing = (string) @file_get_contents($path);
+            if (strpos($existing, '@orp-managed') === false) {
+                // Foreign override present — leave it alone.
+                return false;
+            }
+        }
+
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+        if (!is_dir($dir)) {
+            return false;
+        }
+
+        $code = <<<'PHP'
+<?php
+/**
+ * @orp-managed — DO NOT EDIT, written by the OnlyRoots Player module
+ * (onlyrootsplayer) when its "Lecteur intégré à la fiche produit" toggle is
+ * enabled. Removed automatically when the toggle is turned off or when the
+ * OnlyRoots Player module is uninstalled.
+ *
+ * Forces ProductAudioPlaylistPlugin::hookDisplayProductPlaylistPlugin to
+ * return an empty string while OnlyRoots Player is rendering the
+ * integrated playlist on product pages — preventing both players from
+ * showing simultaneously even if Papp manages to be hooked back on
+ * PAPP_DISPLAY_HOOK between our admin-controller watcher's ticks.
+ */
+class ProductAudioPlaylistPluginOverride extends ProductAudioPlaylistPlugin
+{
+    public function hookDisplayProductPlaylistPlugin($params)
+    {
+        if ((int) Configuration::get('ORP_REPLACE_PAPP_PLAYER') === 1) {
+            return '';
+        }
+        return parent::hookDisplayProductPlaylistPlugin($params);
+    }
+}
+PHP;
+
+        $written = @file_put_contents($path, $code);
+        if ($written === false) {
+            return false;
+        }
+        @chmod($path, 0644);
+
+        // Drop class_index so PS regenerates it on next request and picks up
+        // our override class. This is the standard pattern for modules that
+        // ship overrides; cf. PrestaShop's PrestaShopAutoload.
+        $classIndex = _PS_CACHE_DIR_ . 'class_index.php';
+        if (is_file($classIndex)) {
+            @unlink($classIndex);
+        }
+        return true;
+    }
+
+    /**
+     * Removes our override file (if it's the one we wrote — never touch a
+     * foreign override). Clears class_index so PS forgets about it.
+     */
+    private function removePappOverride()
+    {
+        $path = $this->getPappOverrideFilePath();
+        if (!is_file($path)) {
+            return true;
+        }
+        $content = (string) @file_get_contents($path);
+        if (strpos($content, '@orp-managed') === false) {
+            // Foreign override — leave it alone.
+            return false;
+        }
+        @unlink($path);
+        $classIndex = _PS_CACHE_DIR_ . 'class_index.php';
+        if (is_file($classIndex)) {
+            @unlink($classIndex);
+        }
+        return true;
+    }
+
+    /* ============================================================ */
     /*  HELPERS                                                     */
     /* ============================================================ */
 
@@ -906,7 +1358,7 @@ class OnlyRootsPlayer extends Module
         // sometimes diverge from the standard layout (no megamenu, different
         // wrapper structure), and Swup ends up with a half-swapped page
         // missing the header/footer (observed on OnlyRoots Reggae /
-        // ZOneTheme on /fr/nous-contacter — captured in the v2.4.14 monitor
+        // ZOneTheme on /fr/nous-contacter — captured in the v2.5.0 monitor
         // log).
         $pageNames = [
             'cart', 'order', 'order-confirmation', 'authentication',

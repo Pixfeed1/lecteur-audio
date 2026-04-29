@@ -1,0 +1,170 @@
+/**
+ * OnlyRoots Persistent Audio Player — integrated product playlist (Papp skin)
+ *
+ * Visual lookalike of the third-party Papp module's MediaElement.js skin
+ * (`pro-player-papp.css`) — neutral grey block, hard-edged buttons,
+ * monospace track titles. Provided so the operator can flip
+ * CFG_PRODUCT_PLAYER_SKIN = 'papp' for a transition period where the
+ * customers don't notice the swap, then switch to the modern skin later.
+ *
+ * @author PixFeed - Marc Gueffie
+ */
+
+.orp-product-playlist[data-skin="papp"] {
+    --orp-pp-papp-bg: #ececec;
+    --orp-pp-papp-bg-alt: #dcdcdc;
+    --orp-pp-papp-text: #333;
+    --orp-pp-papp-text-muted: #666;
+    --orp-pp-papp-accent: #4a90e2;
+    --orp-pp-papp-accent-hover: #357abd;
+    --orp-pp-papp-playing: #2c5d8c;
+    --orp-pp-papp-border: #b8b8b8;
+
+    background: var(--orp-pp-papp-bg);
+    border: 1px solid var(--orp-pp-papp-border);
+    border-radius: 0;
+    padding: 10px;
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    color: var(--orp-pp-papp-text);
+    font-size: 12px;
+}
+
+.orp-product-playlist[data-skin="papp"] .orp-product-playlist__header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--orp-pp-papp-border);
+}
+
+.orp-product-playlist[data-skin="papp"] .orp-product-playlist__title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--orp-pp-papp-text);
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.orp-product-playlist[data-skin="papp"] .orp-product-playlist__count {
+    color: var(--orp-pp-papp-text-muted);
+    font-weight: normal;
+    margin-left: 4px;
+}
+
+.orp-product-playlist[data-skin="papp"] .orp-playlist-play-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(to bottom, #f8f8f8 0%, #d8d8d8 100%);
+    color: #333;
+    border: 1px solid var(--orp-pp-papp-border);
+    border-radius: 2px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: normal;
+    text-transform: none;
+    cursor: pointer;
+}
+.orp-product-playlist[data-skin="papp"] .orp-playlist-play-all:hover {
+    background: linear-gradient(to bottom, #fff 0%, #e8e8e8 100%);
+}
+.orp-product-playlist[data-skin="papp"] .orp-playlist-play-all:active {
+    background: linear-gradient(to bottom, #d8d8d8 0%, #f0f0f0 100%);
+}
+
+.orp-product-playlist[data-skin="papp"] .orp-product-playlist__tracks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    border: 1px solid var(--orp-pp-papp-border);
+}
+
+.orp-product-playlist[data-skin="papp"] .orp-product-playlist__track {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-bottom: 1px solid #e8e8e8;
+}
+.orp-product-playlist[data-skin="papp"] .orp-product-playlist__track:last-child {
+    border-bottom: none;
+}
+.orp-product-playlist[data-skin="papp"] .orp-product-playlist__track:nth-child(even) {
+    background: #f7f7f7;
+}
+.orp-product-playlist[data-skin="papp"] .orp-product-playlist__track:hover {
+    background: #eef4fa;
+}
+
+.orp-product-playlist[data-skin="papp"] .orp-track-play {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    background: linear-gradient(to bottom, #6aa3e4 0%, #4a90e2 100%);
+    color: #fff;
+    border: 1px solid var(--orp-pp-papp-accent-hover);
+    border-radius: 2px;
+    cursor: pointer;
+}
+.orp-product-playlist[data-skin="papp"] .orp-track-play:hover {
+    background: linear-gradient(to bottom, #7eb1e8 0%, #5a9ce6 100%);
+}
+.orp-product-playlist[data-skin="papp"] .orp-track-play:active {
+    background: linear-gradient(to bottom, #4a90e2 0%, #6aa3e4 100%);
+}
+.orp-product-playlist[data-skin="papp"] .orp-track-play__icon--pause {
+    display: none;
+}
+
+.orp-product-playlist[data-skin="papp"] .orp-product-playlist__track.is-playing {
+    background: #d6e4f2;
+}
+.orp-product-playlist[data-skin="papp"] .orp-product-playlist__track.is-playing .orp-track-play {
+    background: linear-gradient(to bottom, #3d72ad 0%, #2c5d8c 100%);
+    border-color: #234974;
+}
+.orp-product-playlist[data-skin="papp"] .orp-product-playlist__track.is-playing .orp-track-play__icon--play {
+    display: none;
+}
+.orp-product-playlist[data-skin="papp"] .orp-product-playlist__track.is-playing .orp-track-play__icon--pause {
+    display: inline-flex;
+}
+
+.orp-product-playlist[data-skin="papp"] .orp-track-position {
+    flex: 0 0 24px;
+    color: var(--orp-pp-papp-text-muted);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 11px;
+    text-align: right;
+}
+
+.orp-product-playlist[data-skin="papp"] .orp-track-title {
+    flex: 1 1 auto;
+    color: var(--orp-pp-papp-text);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.orp-product-playlist[data-skin="papp"] .orp-product-playlist__track.is-playing .orp-track-title {
+    color: var(--orp-pp-papp-playing);
+    font-weight: bold;
+}
+
+@media (max-width: 575.98px) {
+    .orp-product-playlist[data-skin="papp"] {
+        padding: 8px;
+    }
+    .orp-product-playlist[data-skin="papp"] .orp-product-playlist__track {
+        padding: 5px 6px;
+    }
+}

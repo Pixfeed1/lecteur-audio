@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.4.2
+ * OnlyRoots Persistent Audio Player — v2.5.0
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.4.2
+ * @version   2.5.0
  */
 (function () {
     'use strict';
@@ -405,6 +405,11 @@
     /* ============================================================ */
 
     function updateMiniButtons() {
+        // Keep the integrated product playlist's row highlight in sync with
+        // the persistent footer player's state. Every state change touches
+        // updateMiniButtons() so this is the right central hook.
+        updateProductPlaylistPlayingState();
+
         var btnsInline = document.querySelectorAll('.orp-play-btn-inline');
         btnsInline.forEach(function (btn) {
             var pid = parseInt(btn.getAttribute('data-product-id'), 10);
@@ -764,38 +769,150 @@
         // add an "Open in player" button next to it. If the third-party module
         // is not present, this function does nothing.
         var existingPlayer = document.querySelector('.progression-playlist');
-        if (!existingPlayer) return;
+        if (existingPlayer) {
+            var bodyId = document.body.getAttribute('id');
+            var match  = bodyId ? bodyId.match(/product-page-(\d+)/) : null;
+            var pid    = 0;
 
-        var bodyId = document.body.getAttribute('id');
-        var match  = bodyId ? bodyId.match(/product-page-(\d+)/) : null;
-        var pid    = 0;
-
-        if (match) {
-            pid = parseInt(match[1], 10);
-        } else {
-            var el = document.querySelector('[data-id-product]')
-                  || document.querySelector('input[name="id_product"]');
-            if (el) {
-                var v = el.getAttribute('data-id-product') || el.value;
-                pid = parseInt(v, 10) || 0;
+            if (match) {
+                pid = parseInt(match[1], 10);
+            } else {
+                var el = document.querySelector('[data-id-product]')
+                      || document.querySelector('input[name="id_product"]');
+                if (el) {
+                    var v = el.getAttribute('data-id-product') || el.value;
+                    pid = parseInt(v, 10) || 0;
+                }
+            }
+            if (pid) {
+                var container = existingPlayer.closest('.papp-player') || existingPlayer.parentElement;
+                if (container && !container.querySelector('.orp-open-in-player')) {
+                    var btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'orp-open-in-player';
+                    btn.setAttribute('data-no-swup', '');
+                    btn.textContent = L10N.openInPlayer;
+                    btn.setAttribute('aria-label', L10N.openPlaylist);
+                    btn.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        onMiniPlayClick(pid);
+                    });
+                    container.appendChild(btn);
+                }
             }
         }
-        if (!pid) return;
 
-        var container = existingPlayer.closest('.papp-player') || existingPlayer.parentElement;
-        if (!container || container.querySelector('.orp-open-in-player')) return;
+        // Wire our integrated product playlist (rendered server-side by
+        // hookDisplayProductPlaylistPlugin when CFG_REPLACE_PAPP_PLAYER=1).
+        // Idempotent across re-runs: each <button> remembers it's bound via
+        // a data flag, so re-init on Swup return doesn't double-bind.
+        wireProductPlaylist();
+        updateProductPlaylistPlayingState();
+    }
 
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'orp-open-in-player';
-        btn.setAttribute('data-no-swup', '');
-        btn.textContent = L10N.openInPlayer;
-        btn.setAttribute('aria-label', L10N.openPlaylist);
-        btn.addEventListener('click', function (e) {
-            e.preventDefault();
-            onMiniPlayClick(pid);
+    /* ============================================================ */
+    /*  INTEGRATED PRODUCT PLAYLIST                                 */
+    /* ============================================================ */
+
+    /**
+     * Wires the click handlers of the integrated product playlist (the
+     * `<div class="orp-product-playlist">` rendered by the
+     * hookDisplayProductPlaylistPlugin server-side template). Each row
+     * has a `.orp-track-play` button with data-product-id, data-track-index,
+     * data-track-url. Clicking it loads the matching track in the persistent
+     * footer player. The "play all" button at the top loads the full
+     * product playlist via the same mechanism as a card-grid play button.
+     */
+    function wireProductPlaylist() {
+        var widgets = document.querySelectorAll('.orp-product-playlist');
+        if (!widgets.length) return;
+
+        widgets.forEach(function (widget) {
+            if (widget.getAttribute('data-orp-bound') === '1') return;
+            widget.setAttribute('data-orp-bound', '1');
+
+            // Per-track play buttons.
+            widget.querySelectorAll('.orp-track-play').forEach(function (btn) {
+                btn.addEventListener('click', function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+
+                    var productId  = parseInt(btn.getAttribute('data-product-id'), 10) || 0;
+                    var trackIndex = parseInt(btn.getAttribute('data-track-index'), 10);
+                    if (!productId || isNaN(trackIndex)) return;
+
+                    // If the same track is already loaded, toggle play/pause.
+                    if (state.productId === productId
+                        && state.currentTrack === trackIndex
+                        && state.loaded) {
+                        togglePlay();
+                        return;
+                    }
+
+                    loadProductPlaylistAndPlay(productId, trackIndex);
+                });
+            });
+
+            // "Play all" button at the top of the widget.
+            var playAllBtn = widget.querySelector('.orp-playlist-play-all');
+            if (playAllBtn) {
+                playAllBtn.addEventListener('click', function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    var productId = parseInt(playAllBtn.getAttribute('data-product-id'), 10) || 0;
+                    if (!productId) return;
+                    loadProductPlaylistAndPlay(productId, 0);
+                });
+            }
         });
-        container.appendChild(btn);
+    }
+
+    /**
+     * Fetches the full product playlist and starts playback at the requested
+     * track index. Same code path as onMiniPlayClick — same caching, same
+     * error handling — so the integrated playlist is just another entry
+     * point into the persistent footer player.
+     */
+    function loadProductPlaylistAndPlay(productId, startIndex) {
+        if (els.player) els.player.classList.add('orp-loading');
+
+        fetch(CONFIG.apiUrl + '?id_product=' + productId, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.error) { dlog('product playlist load error', data.error); return; }
+                loadPlaylist(data);
+                if (startIndex > 0 && startIndex < state.playlist.length) {
+                    loadTrack(startIndex);
+                }
+                playTrack();
+                updateProductPlaylistPlayingState();
+            })
+            .catch(function (err) { dlog('product playlist fetch failed', err); })
+            .finally(function () {
+                if (els.player) els.player.classList.remove('orp-loading');
+            });
+    }
+
+    /**
+     * Synchronises the integrated playlist's `.is-playing` class with the
+     * current state of the persistent footer player. Called on every
+     * play/pause and on every track change so the highlighted row matches
+     * what's actually audible.
+     */
+    function updateProductPlaylistPlayingState() {
+        var widgets = document.querySelectorAll('.orp-product-playlist');
+        if (!widgets.length) return;
+
+        widgets.forEach(function (widget) {
+            var widgetPid = parseInt(widget.getAttribute('data-product-id'), 10) || 0;
+            widget.querySelectorAll('.orp-product-playlist__track').forEach(function (li) {
+                var idx = parseInt(li.getAttribute('data-track-index'), 10);
+                var isCurrent = (widgetPid === state.productId
+                                 && idx === state.currentTrack
+                                 && state.playing);
+                li.classList.toggle('is-playing', isCurrent);
+            });
+        });
     }
 
     /* ============================================================ */

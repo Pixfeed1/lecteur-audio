@@ -3,6 +3,126 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] — 2026-04-29
+
+Major release: integrated product-page playlist that **replaces** the
+third-party Papp module's MediaElement.js player on product pages.
+The integrated playlist transfers playback to our persistent footer
+player on click — single audio source, no more overlap, single visual
+identity. Off by default for backwards-compat; opt-in via the new BO
+toggle.
+
+### Added — integrated product-page playlist
+
+- **New BO toggle `Remplacer le lecteur Papp sur la fiche produit`**
+  (config key `ORP_REPLACE_PAPP_PLAYER`, default OFF). When enabled:
+  - The third-party `productaudioplaylistplugin` module is unregistered
+    from its `displayProductPlaylistPlugin` hook (same hook ZOneTheme
+    invokes at `templates/catalog/product.tpl:107`).
+  - Our module renders an integrated playlist on that hook with
+    per-track play buttons + a "Tout écouter" button.
+  - Each play action loads the selected track in the persistent footer
+    player and starts playback.
+  - The currently-playing row is highlighted in the playlist (synced
+    with the persistent player's state on every play/pause/track
+    change).
+- **New BO radio `Apparence du lecteur intégré`** (config key
+  `ORP_PRODUCT_PLAYER_SKIN`):
+  - `orp` (default) — modern OnlyRoots style: rounded buttons, accent
+    colours from the persistent player palette, subtle hover.
+  - `papp` — visual lookalike of the legacy Papp player (gradient grey
+    buttons, Arial monospace, alternating row backgrounds). Lets the
+    operator transition customers smoothly before flipping to the
+    modern look.
+
+### Added — three-layer defence against Papp re-registration
+
+The third-party Papp module can self-re-register on its hook in
+several scenarios (cache clear, module reset, manual re-hook in BO →
+Module Positions, module update). Three layers prevent it from ever
+producing visible HTML while replacement mode is on:
+
+1. **Hook unregister at toggle ON.** `enablePappReplacement()` snapshots
+   Papp's current hook position, unregisters it, and registers our
+   module on the same hook. The position is stored in
+   `ORP_PAPP_HOOK_POSITION` so it can be restored verbatim on toggle
+   OFF.
+2. **Watcher in `actionAdminControllerInitAfter`.** Every BO admin
+   controller init checks whether Papp is back on the hook; if so,
+   unhooks it again. Catches all administrative actions (cache clear,
+   module update, etc.) on the next admin page load.
+3. **File-level override.** A managed file at
+   `/override/modules/productaudioplaylistplugin/productaudioplaylistplugin.php`
+   short-circuits `ProductAudioPlaylistPlugin::hookDisplayProductPlaylistPlugin`
+   to return an empty string while `ORP_REPLACE_PAPP_PLAYER === 1`.
+   The file is tagged `@orp-managed` so we never clobber a foreign
+   override; `class_index.php` is invalidated on install/uninstall so
+   PrestaShop picks up the change without manual cache flush. Belt-and-
+   suspenders for the small race window between Papp re-registering
+   and the watcher catching it.
+
+Toggle OFF (or module uninstall) reverses every layer: deletes the
+override, re-registers Papp on the hook at its original position,
+unregisters us, drops the cached Smarty templates.
+
+### New files
+
+- `views/templates/hook/product-playlist.tpl` — integrated playlist
+  template (track list + per-track play buttons + "Tout écouter").
+- `views/css/product-playlist-skin-orp.css` — modern skin.
+- `views/css/product-playlist-skin-papp.css` — legacy Papp lookalike.
+- `controllers/front/playlist.php` already exposes the JSON endpoint
+  used by the integrated playlist; reused as-is.
+
+### Modified files
+
+- `onlyrootsplayer.php`
+  - 4 new config constants + defaults preserved on upgrade
+    (`updateValue` only writes when `Configuration::get` returns false).
+  - New `hookDisplayProductPlaylistPlugin($params)` handler.
+  - Pre-registers our module on `displayProductPlaylistPlugin` at
+    install so we're a hook candidate immediately.
+  - Conditional registration of skin CSS in
+    `hookActionFrontControllerSetMedia`.
+  - Extended `actionAdminControllerInitAfter` watcher (layer 2 above).
+  - New `Lecteur intégré à la fiche produit` form section in
+    `renderForm()` (toggle + skin radio).
+  - `postProcess()` calls `enablePappReplacement` /
+    `disablePappReplacement` on toggle transition.
+  - `uninstall()` always restores Papp's hook.
+- `views/js/player.js`
+  - New `wireProductPlaylist()` and `loadProductPlaylistAndPlay()` —
+    bind click handlers on the integrated playlist, fetch via the
+    existing `/module/onlyrootsplayer/playlist` endpoint, hand off to
+    the persistent player.
+  - `updateProductPlaylistPlayingState()` reflects the persistent
+    player's `state.playing / state.productId / state.currentTrack`
+    onto the integrated playlist's `.is-playing` row class. Hooked
+    into `updateMiniButtons()` so every state change refreshes both.
+  - `initProductPage()` now wires the integrated playlist alongside
+    its existing "Open in player" button injection. Idempotent across
+    Swup re-runs.
+
+### Backwards compatibility
+
+No breaking change. Existing 2.4.x installs upgrade with
+`ORP_REPLACE_PAPP_PLAYER = 0` (the install upsert only writes default
+values when the key is missing). The integrated playlist, the
+override file, and the hook unregister all stay dormant until the
+operator flips the toggle in the BO. Operators on a non-Papp shop
+see no change.
+
+### Notes
+
+- Out-of-scope client requests (track listing in the product short
+  description / per-track play buttons sourced from Discogs metadata)
+  are NOT implemented in this release — they're quoted separately.
+- The audio-coordination guard added in 2.4.14 (only one `<audio>`
+  element audible at any time) remains effective and stacks with the
+  hook-replacement approach: even if a non-Papp third-party audio
+  source ever appears on a product page, our player still pauses
+  itself when that other source starts.
+
 ## [2.4.14] — 2026-04-29
 
 Two in-scope bug fixes from operator's client feedback. Other client
