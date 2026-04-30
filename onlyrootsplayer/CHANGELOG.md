@@ -3,6 +3,48 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.4] — 2026-04-30
+
+Operator opt-in toggle for re-including the Contact page in Swup
+navigation, so the audio can keep playing across the contact page
+instead of being interrupted by a full reload.
+
+### Added — `ORP_INCLUDE_CONTACT` BO toggle (off by default)
+
+After auditing ZOneTheme v2.7.3 source (`templates/contact.tpl`,
+`templates/page.tpl`, all four layouts in `templates/layouts/`), the
+contact page is structurally identical to product/category pages:
+
+- `contact.tpl` extends `page.tpl` which extends `$layout`
+- Every layout shipped with ZOneTheme exposes the same container chain
+  `<main id="page"> > <section id="wrapper"> > .main-content >
+  .container > .row > #content-wrapper > .center-wrapper > #content`
+
+→ Our default Swup container fallback (`#content-wrapper, #content,
+main, #main`) finds `#content-wrapper` on Contact like everywhere else.
+
+The catastrophic-swap observed in v2.4.5 most likely came from a
+third-party module mounted on the contact page (the contactform's
+own JS, a captcha, a chat widget) toggling `<html>.classList` and
+losing the `swup-enabled` flag, NOT from a layout divergence. So we
+keep the page excluded by default but expose a toggle so the operator
+can opt in after staging validation. The watchdog and
+catastrophic-swap detector remain active as a safety net — if the
+opt-in path breaks, the user gets a forced full reload, never a stuck
+empty container.
+
+### Changed — `getSwupExcludePaths()`
+
+When `ORP_INCLUDE_CONTACT === 1`, the helper drops `'contact'` from
+the auto-built exclusion list (built from `Link::getPageLink()`).
+The controller-based `controller=contact` exclusion was never in the
+list, so it doesn't need a parallel guard.
+
+`isCurrentRequestExcludedFromSwup()` (used by `hookDisplayFooter` to
+suppress the player on excluded pages, added in v2.5.3) inherits this
+change for free since it reads the same exclusion list — when the
+toggle is on, the player is also rendered on the contact page.
+
 ## [2.5.3] — 2026-04-30
 
 Targeted fixes for two operator-confirmed bugs after the v2.5.2 deploy.

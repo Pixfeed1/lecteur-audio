@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.5.3
+ * @version   2.5.4
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -39,6 +39,9 @@ class OnlyRootsPlayer extends Module
     const CFG_POST_SWAP_JS      = 'ORP_POST_SWAP_JS';
     const CFG_THEME_PRESET      = 'ORP_THEME_PRESET';
     const CFG_MONITOR_ENABLED   = 'ORP_MONITOR_ENABLED';
+    /* Opt-in toggle to re-include the Contact page in Swup navigation
+       (off by default — see CHANGELOG 2.5.4 for the rationale). */
+    const CFG_INCLUDE_CONTACT   = 'ORP_INCLUDE_CONTACT';
 
     /* Integrated product playlist (replaces Papp's own player on product
        pages — see CHANGELOG 2.5.2 for the full rationale). */
@@ -80,7 +83,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.5.3';
+        $this->version          = '2.5.4';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -142,6 +145,11 @@ class OnlyRootsPlayer extends Module
             // F12 console open to capture any reinit-related errors.
             self::CFG_THEME_PRESET      => self::THEME_PRESET_NONE,
             self::CFG_MONITOR_ENABLED   => 0,
+            // Contact stays excluded from Swup by default. Operator opts in
+            // via BO if they want to test continuous-audio navigation
+            // through the contact page (catastrophic-swap watchdog +
+            // monitor remain in place as a safety net).
+            self::CFG_INCLUDE_CONTACT   => 0,
             // Off by default on upgrades — the operator opts in via BO so
             // we never silently swap out Papp's player on existing installs.
             self::CFG_REPLACE_PAPP_PLAYER => 0,
@@ -201,6 +209,7 @@ class OnlyRootsPlayer extends Module
             self::CFG_POST_SWAP_JS,
             self::CFG_THEME_PRESET,
             self::CFG_MONITOR_ENABLED,
+            self::CFG_INCLUDE_CONTACT,
             self::CFG_REPLACE_PAPP_PLAYER,
             self::CFG_PRODUCT_PLAYER_SKIN,
             self::CFG_PAPP_HOOK_REMOVED,
@@ -409,6 +418,7 @@ class OnlyRootsPlayer extends Module
             self::CFG_POST_SWAP_JS      => (string) Tools::getValue(self::CFG_POST_SWAP_JS),
             self::CFG_THEME_PRESET      => $this->sanitizeThemePreset(Tools::getValue(self::CFG_THEME_PRESET)),
             self::CFG_MONITOR_ENABLED   => (int) Tools::getValue(self::CFG_MONITOR_ENABLED),
+            self::CFG_INCLUDE_CONTACT   => (int) Tools::getValue(self::CFG_INCLUDE_CONTACT),
             self::CFG_REPLACE_PAPP_PLAYER => $newReplaceFlag,
             self::CFG_PRODUCT_PLAYER_SKIN => $skin,
         ];
@@ -554,6 +564,17 @@ class OnlyRootsPlayer extends Module
                     ],
                     [
                         'type'    => 'switch',
+                        'label'   => $this->tAdmin('Inclure la page Contact dans la navigation Swup'),
+                        'name'    => self::CFG_INCLUDE_CONTACT,
+                        'desc'    => $this->tAdmin('OPT-IN — par défaut désactivé. Quand activé, la page Contact est navigable via Swup et l\'audio continue à jouer pendant la transition (au lieu d\'un rechargement complet qui interrompt la lecture). Le layout du thème ZOneTheme est compatible (mêmes conteneurs #content-wrapper / #content que les autres pages), mais un module tiers monté sur la page Contact (formulaire, captcha, chat) peut casser le swap. Le watchdog et le détecteur de catastrophic swap restent actifs : si un échec est détecté, la page est rechargée intégralement automatiquement. À activer prudemment et à tester en staging.'),
+                        'is_bool' => true,
+                        'values'  => [
+                            ['id' => 'include_contact_on',  'value' => 1, 'label' => $this->tAdmin('Activé')],
+                            ['id' => 'include_contact_off', 'value' => 0, 'label' => $this->tAdmin('Désactivé')],
+                        ],
+                    ],
+                    [
+                        'type'    => 'switch',
                         'label'   => $this->tAdmin('Mode debug'),
                         'name'    => self::CFG_DEBUG_ENABLED,
                         'desc'    => $this->tAdmin('Logge les événements détaillés dans la console du navigateur (aucun log côté serveur). À désactiver en production.'),
@@ -661,6 +682,7 @@ class OnlyRootsPlayer extends Module
             self::CFG_POST_SWAP_JS      => (string) Configuration::get(self::CFG_POST_SWAP_JS),
             self::CFG_THEME_PRESET      => $this->getThemePreset(),
             self::CFG_MONITOR_ENABLED   => (int) Configuration::get(self::CFG_MONITOR_ENABLED),
+            self::CFG_INCLUDE_CONTACT   => (int) Configuration::get(self::CFG_INCLUDE_CONTACT),
             self::CFG_REPLACE_PAPP_PLAYER => (int) Configuration::get(self::CFG_REPLACE_PAPP_PLAYER),
             self::CFG_PRODUCT_PLAYER_SKIN => $this->getProductPlayerSkin(),
         ];
@@ -1402,6 +1424,18 @@ PHP;
             'discount', 'order-detail', 'module-payment',
             'contact', 'sitemap', 'stores',
         ];
+
+        // Operator opt-in (CFG_INCLUDE_CONTACT, off by default): drop the
+        // contact page from the exclusion list so Swup handles it like any
+        // other page. The watchdog + catastrophic-swap detector stay armed
+        // and will trigger a full reload if the swap fails. See the BO
+        // field description for the full safety contract.
+        if ((int) Configuration::get(self::CFG_INCLUDE_CONTACT) === 1) {
+            $pageNames = array_values(array_filter(
+                $pageNames,
+                function ($p) { return $p !== 'contact'; }
+            ));
+        }
         foreach ($pageNames as $page) {
             try {
                 $url = (string) $this->context->link->getPageLink($page, true);
