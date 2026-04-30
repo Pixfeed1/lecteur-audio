@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.5.6
+ * OnlyRoots Persistent Audio Player — v2.5.7
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.5.6
+ * @version   2.5.7
  */
 (function () {
     'use strict';
@@ -1027,51 +1027,25 @@
         } catch (e) {}
     }
 
-    // Capture-phase fail-safe: even if the link somehow escapes the Swup
-    // selector (e.g. dynamically inserted after a swap, before our
-    // tagLanguageLinks pass runs), this listener fires BEFORE Swup's
-    // delegated bubble-phase handler and stops propagation so the browser
-    // performs a normal full-reload navigation.
+    // The capture-phase click blocker we shipped in v2.5.3 has been
+    // REMOVED in v2.5.7. After the v2.5.6 production test, language
+    // navigation still failed silently even with the tightened
+    // heuristic — clicking EN in the dropdown did not change locale
+    // (operator-confirmed). The blocker's `stopImmediatePropagation()`
+    // was killing whatever ZOneTheme JS handler the language link
+    // depends on (cookie set + redirect, etc.) before it could run.
     //
-    // We don't preventDefault — only stop the event from bubbling into
-    // Swup's delegated click handler.
+    // We now rely on a three-layer defence WITHOUT the capture blocker:
+    //   1. linkSelector excludes `[data-iso-code]` and `[data-no-swup]`
+    //   2. tagLanguageLinks() flags `[data-iso-code]` and `[href*="id_lang="]`
+    //      with `data-no-swup` after init and after every Swup swap
+    //   3. ignoreVisit() catches any remaining language URL via either
+    //      the 2-letter-prefix heuristic OR the explicit `id_lang=`
+    //      query-string check (added v2.5.7)
     //
-    // IMPORTANT (defanged in v2.5.6): we restrict the trigger to anchors
-    // whose href OBVIOUSLY identifies a language switch — `data-iso-code`
-    // (PrestaShop standard for ps_languageselector) or `id_lang=` query
-    // string (the `url entity='language'` helper output). The v2.5.3
-    // version used a much broader heuristic that ALSO matched `closest('
-    // .language-selector')` etc. — but that scope catches the dropdown
-    // TOGGLE button (which lives inside `.language-selector`) and broke
-    // it as soon as `target.closest('a[href]')` resolved to any anchor
-    // inside the wrapper. Keep this list tight.
-    var __orpLangCaptureBound = false;
-    function bindLanguageCaptureBlocker() {
-        if (__orpLangCaptureBound) return;
-        __orpLangCaptureBound = true;
-        try {
-            document.addEventListener('click', function (ev) {
-                try {
-                    if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
-                    var target = ev.target;
-                    if (!target || !target.closest) return;
-                    var anchor = target.closest('a[href]');
-                    if (!anchor) return;
-                    var href = anchor.getAttribute('href') || '';
-                    // Tight heuristic — see comment block above.
-                    var isLang = anchor.hasAttribute('data-iso-code')
-                              || href.indexOf('id_lang=') !== -1;
-                    if (!isLang) return;
-                    if (window.__orpMonitorEnqueue) {
-                        try { window.__orpMonitorEnqueue('orp:lang-blocker-fired', {
-                            href: href.substring(0, 200),
-                        }); } catch (e2) {}
-                    }
-                    ev.stopImmediatePropagation();
-                } catch (e) {}
-            }, true);
-        } catch (e) {}
-    }
+    // This is enough to keep Swup from intercepting language nav, and
+    // leaves the theme's own click handler free to run.
+    function bindLanguageCaptureBlocker() { /* no-op since v2.5.7 */ }
 
     // Sidebar column sync — fixes Bug 3 ("left column disappears on
     // category navigation"). The default Swup container `#content-wrapper`
@@ -1447,6 +1421,13 @@
                         var curMatch  = window.location.pathname.match(/^\/([a-z]{2})(\/|$)/);
                         var tgtMatch  = u.pathname.match(/^\/([a-z]{2})(\/|$)/);
                         if (curMatch && tgtMatch && curMatch[1] !== tgtMatch[1]) return true;
+
+                        // Language switch via PrestaShop's `url entity='language'`
+                        // helper — produces `?id_lang=N` URLs when the shop has
+                        // friendly URLs disabled or for ajax-style redirects.
+                        // The 2-letter-prefix heuristic above can't detect this
+                        // (path is unchanged, only the query string changes).
+                        if (u.searchParams && u.searchParams.has('id_lang')) return true;
                     } catch (e) { return true; }
 
                     if (/\.(pdf|zip|mp3|wav|ogg|jpg|jpeg|png|gif|svg|webp|mp4|webm|doc|docx|xls|xlsx)(\?|$)/i.test(url)) {

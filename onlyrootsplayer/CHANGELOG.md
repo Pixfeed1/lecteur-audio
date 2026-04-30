@@ -3,6 +3,37 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.7] — 2026-04-30
+
+Hot fix after the v2.5.6 production test. Operator confirmed: dropdown
+toggle works (good — v2.5.6 fixed that), but clicking EN in the open
+menu still doesn't switch language. The capture-phase blocker even in
+its tightened v2.5.6 form was killing whatever theme JS handler the
+language link depends on (cookie set + redirect, etc.) before it
+could run.
+
+### Removed — capture-phase language click blocker
+
+`bindLanguageCaptureBlocker` is now a no-op. The function is kept as
+a stub (still called from `init()` so existing call sites don't error)
+but does nothing. The three-layer defence WITHOUT the blocker:
+
+1. linkSelector excludes `[data-iso-code]` and `[data-no-swup]`
+   (Swup-level filter)
+2. tagLanguageLinks() flags `[data-iso-code]` and `[href*="id_lang="]`
+   with `data-no-swup` after init and after every Swup swap
+3. ignoreVisit() catches any remaining language URL via either
+   the 2-letter-prefix heuristic OR the explicit `id_lang=`
+   query-string check (added below)
+
+### Added — explicit `id_lang=` detection in ignoreVisit
+
+`ignoreVisit()` now returns `true` when the target URL has an
+`id_lang` query parameter. This catches PrestaShop's `url
+entity='language'` helper output when friendly URLs are disabled or
+when the path itself doesn't change between source and target — a
+case the 2-letter-prefix heuristic was blind to.
+
 ## [2.5.6] — 2026-04-30
 
 Hot fix after the v2.5.5 production test. Two corrections:
