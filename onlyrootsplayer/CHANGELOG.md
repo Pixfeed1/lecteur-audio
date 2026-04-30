@@ -3,6 +3,84 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.10] — 2026-04-30
+
+Structural fix for the recurring listener-stacking bug pattern.
+
+### Root cause finally identified
+
+After 8 patches on what looked like distinct symptoms (Bootstrap
+dropdown intermittently broken, language flag dropdown unresponsive
+on product pages, occasional double-firing of slider re-init,
+add-to-cart counted twice on rare nav sequences) we identified the
+shared cause: **listener stacking via SwupScriptsPlugin re-execution**.
+
+`SwupScriptsPlugin({head: true, body: true})` (line ~1370) re-runs
+EVERY inline `<script>` after each swap so themes that bootstrap
+inline scripts (PrestaShop core, ZOneTheme, most modules) keep
+working. The downside: any inline script that registers a listener
+via `$(document).on(...)`, `document.addEventListener(...)`,
+`prestashop.on(...)` etc. ALSO re-runs, stacking a NEW listener on
+top of the existing one without removing it. After 3-4 nav hops:
+3-4 handlers fire for one click. Symptoms:
+
+- Bootstrap dropdown opens then closes itself
+- Language flag dropdown unresponsive (handler chain interferes)
+- Slider re-init fires multiple times per swap
+- Click counts off (carts, etc.)
+
+The v2.0.0 mitigation only matched `var prestashop = {...}`
+declarations (to avoid clobbering the live emitter). It did NOT
+catch listener-binding patterns, so those scripts were left to
+re-execute and stack listeners freely.
+
+### Fix
+
+Extended the inline-script ignore heuristic to catch all common
+listener-binding patterns. The new regex:
+
+```
+/var\s+prestashop\s*=|prestashop\.(on|emit)\(|
+ \$\(\s*document\s*\)\.on\(|document\.addEventListener\(|
+ \.on\(['"]click['"]/
+```
+
+covers:
+- `var prestashop = {...}` (original case, kept)
+- `prestashop.on(`, `prestashop.emit(` (PS event emitter binds)
+- `$(document).on(...)` (jQuery delegation, classic stack-trigger)
+- `document.addEventListener(...)` (vanilla equivalent)
+- `.on('click'...)` / `.on("click"...)` (generic jQuery click bind,
+  catches Bootstrap data-toggle delegation patterns)
+
+Scripts matching ANY of these get `data-swup-ignore-script` added
+before swap, so SwupScriptsPlugin skips them. The original execution
+at first page load remains in place, so the listeners DO get bound
+once — they just don't get re-bound on every subsequent nav.
+
+### Operator escape hatch
+
+Authors who legitimately need an inline script to ALWAYS re-execute
+on every nav (e.g., page-specific config injection that ALSO happens
+to call `$(document).on(...)`) can add `data-swup-reload-script`
+to their `<script>` tag, which takes priority over our heuristic
+and skips the auto-ignore.
+
+### Trade-off accepted
+
+A small number of inline init scripts that combine "page-specific
+data setup" + "listener binding" in the same block will be skipped,
+losing their data-setup side effect. We accept this — listener
+stacking is a far worse failure mode (manifests as random user-facing
+bugs) than a one-off init that doesn't run on a page where the data
+typically doesn't change between navs anyway.
+
+### Credit
+
+Diagnosis credit to a parallel Claude session that audited the SPA
+plumbing line by line and identified the stack pattern. We confirmed
+each claim against the actual code before shipping.
+
 ## [2.5.9] — 2026-04-30
 
 Restore audio continuity on home navigation — the v2.5.6 sledgehammer

@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.5.9
+ * OnlyRoots Persistent Audio Player — v2.5.10
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.5.9
+ * @version   2.5.10
  */
 (function () {
     'use strict';
@@ -1482,8 +1482,46 @@
             } catch (e) { return 0; }
         }
 
-        // Mark inline `var prestashop = {...}` blocks so ScriptsPlugin doesn't
-        // re-execute them (which would replace the live prestashop object).
+        // Mark inline scripts that would cause listener accumulation if
+        // re-executed by SwupScriptsPlugin on every swap.
+        //
+        // The ScriptsPlugin we use (`{head: true, body: true}`, line ~1370)
+        // re-runs every inline `<script>` after each swap so that pages
+        // which embed their bootstrap code inline (PrestaShop core, most
+        // themes including ZOneTheme) work transparently. The downside:
+        // any inline script that registers a listener with
+        // `$(document).on(...)`, `document.addEventListener(...)`,
+        // `prestashop.on(...)` etc. ALSO re-runs, stacking a new listener
+        // on top of the existing one without removing it. After 3-4 nav
+        // hops you have 3-4 handlers firing for one click, which produces
+        // exactly the intermittent symptoms the operator has observed:
+        //   - Bootstrap dropdown opens then closes itself immediately
+        //   - Language flag dropdown unresponsive after a few navs
+        //   - Click count off (e.g., add-to-cart adds N items)
+        //   - Slider re-init firing more than once per swap
+        //
+        // We mark these scripts with `data-swup-ignore-script` so Swup's
+        // ScriptsPlugin skips them. The patterns covered:
+        //   - `var prestashop = {...}` — original v2.0.0 case (data block,
+        //     re-running it would clobber the live emitter object)
+        //   - `prestashop.on(` / `prestashop.emit(` — module re-binds
+        //     would stack listeners on the live emitter
+        //   - `$(document).on(` — jQuery delegation, classic listener-stack
+        //     trigger
+        //   - `document.addEventListener(` — vanilla equivalent
+        //   - `.on('click'` / `.on("click"` — generic jQuery click bind
+        //     (catches Bootstrap-style data-toggle delegation)
+        //
+        // Trade-off: an inline init script that legitimately needs to
+        // re-run on every page (e.g. one that reads `<script>var ctx = ...`
+        // for page-specific config) and ALSO happens to call
+        // `$(document).on(...)` will be skipped. We accept that — listener
+        // stacking is a far worse failure mode than a one-off init that
+        // doesn't run. Authors who need a script ALWAYS re-executed can
+        // explicitly mark it `data-swup-reload-script` in their template,
+        // which takes priority over our heuristic.
+        var IGNORE_SCRIPT_PATTERNS = /var\s+prestashop\s*=|prestashop\.(on|emit)\(|\$\(\s*document\s*\)\.on\(|document\.addEventListener\(|\.on\(['"]click['"]/;
+
         swupInstance.hooks.before('content:replace', function (visit) {
             try {
                 var html = visit && visit.to && visit.to.html ? visit.to.html : '';
@@ -1493,8 +1531,9 @@
                 if (!doc) return;
                 var scripts = doc.querySelectorAll('script:not([src])');
                 scripts.forEach(function (s) {
+                    if (s.hasAttribute('data-swup-reload-script')) return; // operator opt-out
                     var code = s.textContent || '';
-                    if (/var\s+prestashop\s*=/.test(code)) {
+                    if (IGNORE_SCRIPT_PATTERNS.test(code)) {
                         s.setAttribute('data-swup-ignore-script', '');
                     }
                 });
