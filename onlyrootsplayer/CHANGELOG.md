@@ -3,6 +3,53 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.9] — 2026-04-30
+
+Restore audio continuity on home navigation — the v2.5.6 sledgehammer
+that force-reloaded the home was based on a wrong hypothesis.
+
+### Removed — URL-pattern force-reload for ZOneTheme home
+
+Operator confirmed via F12 console on production:
+
+```
+typeof window.jQuery.fn.slick      → "function"
+typeof window.jQuery.fn.nivoSlider → "function"
+typeof window.jQuery.fn.sticky     → "function"
+```
+
+All three slider plugins ARE registered on the global `window.jQuery`.
+Investigating ZOneTheme's compiled `assets/js/theme.js` confirms why:
+the bundle's webpack module 311 is literally `t.exports = jQuery` —
+it imports the global jQuery, then registers Slick and NivoSlider on
+it via `t.fn.slick = ...` and `t.fn.nivoSlider = ...`. The plugins
+have always been globally accessible.
+
+The v2.5.6 force-reload was diagnosing the wrong root cause. The
+preset was reporting `homeBlockSliders=0` not because the plugin was
+missing but because the Swup-fetched home document either contained
+no slider DOM (server returned a degraded variant) or the swap
+selector found no matching elements. Either way, force-reloading
+the home interrupts audio playback — which is the exact opposite of
+what the module is supposed to do (operator quote: "il faut que l'audio
+continue dans tous les cas").
+
+The DOM-detection fallback below is kept for theme variants that
+genuinely don't expose the plugins globally — those cases will still
+get the force-reload and a clean slider re-init via reload.
+
+### Trade-off
+
+Audio now continues across nav-to-home transitions. If the swapped
+home renders with degraded content (the dom:diff log captured
+`imagesLoaded: 13/13 -> 9/9` with `bodyClasses: ... -> layout-left-
+column no-customer-address page-i...` instead of the full home), the
+user sees a less complete home until they refresh. That secondary
+issue is server-side (PrestaShop cache key / cookies / Smarty
+context for Swup-fetched URLs) and outside the scope of this module.
+Operator must report visually if it materializes, then we investigate
+the server-side rendering separately.
+
 ## [2.5.8] — 2026-04-30
 
 Translation fix — module strings (front + BO) now actually load when

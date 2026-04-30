@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.5.8
+ * OnlyRoots Persistent Audio Player — v2.5.9
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.5.8
+ * @version   2.5.9
  */
 (function () {
     'use strict';
@@ -1140,39 +1140,23 @@
             if (!doc) return false;
             var $ = window.jQuery || window.$;
 
-            // Sledgehammer fallback for ZOneTheme home: if the target URL
-            // is the language root (`/`, `/fr/`, `/en/`...) AND the active
-            // theme preset is zonetheme, ALWAYS force-reload regardless
-            // of slider DOM detection. The v2.5.5 detection-based check
-            // failed in production (monitor log 2026-04-30T09:14:16Z:
-            // visit:start product → /en/ swapped without triggering the
-            // reload, sliders stayed dead). The home page is the only
-            // page that bundles slider-heavy content in ZOneTheme so
-            // this URL-based shortcut is reliable and bulletproof.
-            try {
-                var toUrl  = (visit && visit.to && visit.to.url) ? visit.to.url : '';
-                var toPath = '';
-                if (toUrl) {
-                    try { toPath = new URL(toUrl, window.location.origin).pathname; }
-                    catch (e) { toPath = toUrl; }
-                }
-                // Match `/`, `/fr`, `/fr/`, `/en/`, `/de/`, etc. — language-
-                // prefixed root or bare root.
-                var isHome = toPath === '/' || /^\/[a-z]{2}\/?$/.test(toPath);
-                if (isHome && CONFIG.themePreset === 'zonetheme') {
-                    dlog('forceReload: target is ZOneTheme home', toPath);
-                    if (window.__orpMonitorEnqueue) {
-                        try { window.__orpMonitorEnqueue('orp:force-reload', {
-                            reason: 'zonetheme-home', target: toPath,
-                        }); } catch (e2) {}
-                    }
-                    return true;
-                }
-            } catch (e) {}
+            // NOTE (v2.5.9): the v2.5.6 URL-pattern shortcut that
+            // force-reloaded ZOneTheme home was REMOVED. We confirmed via
+            // F12 console on production that `window.jQuery.fn.slick`,
+            // `.nivoSlider` and `.sticky` ARE all globally available
+            // (the bundled webpack module 311 does literally
+            // `t.exports = jQuery`, registering every slider plugin on
+            // the global jQuery). The v2.5.6 sledgehammer was based on
+            // a wrong hypothesis and broke audio continuity on home nav
+            // for nothing. The preset's slider reinit functions can now
+            // do their job normally on the swapped DOM.
 
             if (!$ || !$.fn) return false;
 
             // Slick — used by home blocks, brand logos, featured categories.
+            // Falls through to false in normal ZOneTheme installs (plugin
+            // is global). Only triggers force-reload on theme variants
+            // where Slick is genuinely missing on the global jQuery.
             var hasSlick = doc.querySelector(
                 '.js-home-block-slider:not(.slick-initialized),' +
                 '.js-brand-logo-slider:not(.slick-initialized),' +
