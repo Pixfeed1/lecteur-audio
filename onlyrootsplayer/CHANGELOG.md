@@ -3,6 +3,63 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.8] — 2026-04-30
+
+Translation fix — module strings (front + BO) now actually load when
+the shop is in English.
+
+### Fixed — XLF naming convention
+
+Symfony Translator (the engine PrestaShop 1.7+/8.x uses for module
+catalogs) wants the locale baked into the **file name**, not just the
+parent folder. Our v2.5.2 file was at:
+
+```
+translations/en-US/ModulesOnlyrootsplayerShop.xlf
+```
+
+Symfony silently never loaded it, so every `{l s='Écouter' d='Modules
+.Onlyrootsplayer.Shop'}` in templates and every `$this->trans()` /
+`tAdmin()` call in PHP fell back to the source string (French) on a
+shop running in English. Renamed to:
+
+```
+translations/en-US/ModulesOnlyrootsplayerShop.en-US.xlf
+```
+
+Confirmation: the existing file's own header already said
+`original="ModulesOnlyrootsplayerShop.fr-FR.xlf"` — the locale-in-name
+pattern was the intent from the start, the actual file just got the
+wrong name when it was added.
+
+### Added — Admin domain XLF
+
+The module also uses `Modules.Onlyrootsplayer.Admin` for every BO
+string (54 unique strings: form labels, descriptions, monitor panel,
+displayName, error messages...). v2.5.2 had no Admin XLF at all, so
+the entire BO config form stayed in French regardless of shop locale.
+Generated `ModulesOnlyrootsplayerAdmin.en-US.xlf` from a sweep of all
+`tAdmin()` and `$this->trans(..., 'Modules.Onlyrootsplayer.Admin')`
+call sites.
+
+### Added — `en-GB` locale folder
+
+PrestaShop ships with both `en-US` and `en-GB` packs and operators
+can install either. We were only providing `en-US`, so a shop set to
+en-GB never got the English strings. Added a parallel
+`translations/en-GB/` folder with both
+`ModulesOnlyrootsplayerShop.en-GB.xlf` and
+`ModulesOnlyrootsplayerAdmin.en-GB.xlf` — same English text as en-US
+(no spelling divergences in our limited UI vocabulary). Each folder
+ships an anti-listing `index.php` matching the convention of the rest
+of the module.
+
+### Operator action required after upgrade
+
+PrestaShop caches Symfony catalogs under `var/cache/`. After
+deploying 2.5.8, vide le cache (BO → Paramètres avancés →
+Performance → Vider le cache) for the new files to be picked up.
+
 ## [2.5.7] — 2026-04-30
 
 Hot fix after the v2.5.6 production test. Operator confirmed: dropdown
