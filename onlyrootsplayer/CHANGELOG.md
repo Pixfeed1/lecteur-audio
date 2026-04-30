@@ -3,6 +3,63 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.6] — 2026-04-30
+
+Hot fix after the v2.5.5 production test. Two corrections:
+
+### Fixed — Bug 1 sledgehammer for ZOneTheme home
+
+The v2.5.5 detection-based force-reload didn't trigger in production
+(monitor capture 09:14:16Z: `swup:visit:start product → /en/`,
+`content:replace`, `visit:end` — no reload, all preset slider counts
+stayed at 0). The DOM-based check `targetRequiresPluginsWeDontHave`
+returned false, probably because either:
+
+- the parsed target document didn't contain the expected slider DOM at
+  the moment we checked (the home blocks may render conditionally on
+  current language / cache state), OR
+- `window.jQuery.fn.slick` actually evaluates to truthy on a tunnel
+  vision check while the working slick instance lives on a webpack-
+  scoped jQuery — both can coexist in a ZOneTheme install.
+
+**Fix.** Added an unconditional URL-pattern shortcut at the top of the
+helper: when the target URL matches the home pattern (`/`, `/fr`,
+`/fr/`, `/en/`, etc. — language-prefix-only path) AND the active
+preset is `zonetheme`, force a full reload regardless of DOM
+inspection. This is the only page in ZOneTheme that bundles
+slider-heavy content, so the URL-based shortcut is reliable. Also
+emits an `orp:force-reload` monitor event with the reason so the next
+log capture confirms the path taken.
+
+### Fixed — language switcher dropdown / nav broken on swapped pages
+
+Operator reported after v2.5.5 deploy: clicking the FR→EN flag does
+nothing on product pages, and the dropdown toggle itself stops
+working. Root cause is the v2.5.3 defensive plumbing was too broad:
+
+- `tagLanguageLinks()` selectors included `.language-selector a[href]`
+  which catches the dropdown TOGGLE link (rendered by ZOneTheme as a
+  `<a class="dropdown-toggle">` inside `.language-selector`). Tagging
+  the toggle with `data-no-swup` made Swup's linkSelector ignore it
+  (good) but also made the browser try to follow its empty `href` /
+  not let Bootstrap's dropdown handler run cleanly (bad).
+- `bindLanguageCaptureBlocker()` used the same broad heuristic
+  (`closest('.language-selector')`) and called `stopImmediatePropagation`
+  on every click in the wrapper, including the toggle click → killed
+  Bootstrap's dropdown handler in capture phase before it could open
+  the menu.
+
+**Fix.** Tightened both helpers to the strong language signals only:
+anchors with `data-iso-code` attribute (PrestaShop ps_languageselector
+standard) or with `id_lang=` in their href (the `url entity='language'`
+helper output). Wrapper-class selectors (`.language-selector`,
+`#_desktop_language_selector`, etc.) are removed from both helpers —
+they were over-broad and matched the toggle.
+
+Also added telemetry: every capture-blocker firing emits
+`orp:lang-blocker-fired` with a truncated href, so the next monitor
+log confirms which clicks the blocker actually intercepts.
+
 ## [2.5.5] — 2026-04-30
 
 Two fixes for client-confirmed bugs (after the v2.5.2 deploy + the

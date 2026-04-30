@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.5.5
+ * OnlyRoots Persistent Audio Player — v2.5.6
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.5.5
+ * @version   2.5.6
  */
 (function () {
     'use strict';
@@ -1011,13 +1011,15 @@
     function tagLanguageLinks(root) {
         try {
             var scope = root || document;
+            // Tightened in v2.5.6 — drop wrapper-class selectors that
+            // also matched the dropdown TOGGLE link (e.g. ZOneTheme
+            // renders `.language-selector` with a `.dropdown-toggle`
+            // inside it; our previous broad selector tagged the toggle
+            // itself with data-no-swup, which then made Bootstrap's
+            // dropdown handler misbehave on Swup-swapped pages).
             var anchors = scope.querySelectorAll(
                 'a[data-iso-code],' +
-                'a[href*="id_lang="],' +
-                '.language-selector a[href],' +
-                '.js-language-selector a[href],' +
-                '#_desktop_language_selector a[href],' +
-                '#_mobile_language_selector a[href]'
+                'a[href*="id_lang="]'
             );
             for (var i = 0; i < anchors.length; i++) {
                 anchors[i].setAttribute('data-no-swup', 'true');
@@ -1033,6 +1035,16 @@
     //
     // We don't preventDefault — only stop the event from bubbling into
     // Swup's delegated click handler.
+    //
+    // IMPORTANT (defanged in v2.5.6): we restrict the trigger to anchors
+    // whose href OBVIOUSLY identifies a language switch — `data-iso-code`
+    // (PrestaShop standard for ps_languageselector) or `id_lang=` query
+    // string (the `url entity='language'` helper output). The v2.5.3
+    // version used a much broader heuristic that ALSO matched `closest('
+    // .language-selector')` etc. — but that scope catches the dropdown
+    // TOGGLE button (which lives inside `.language-selector`) and broke
+    // it as soon as `target.closest('a[href]')` resolved to any anchor
+    // inside the wrapper. Keep this list tight.
     var __orpLangCaptureBound = false;
     function bindLanguageCaptureBlocker() {
         if (__orpLangCaptureBound) return;
@@ -1046,14 +1058,15 @@
                     var anchor = target.closest('a[href]');
                     if (!anchor) return;
                     var href = anchor.getAttribute('href') || '';
+                    // Tight heuristic — see comment block above.
                     var isLang = anchor.hasAttribute('data-iso-code')
-                              || anchor.hasAttribute('data-no-swup')
-                              || href.indexOf('id_lang=') !== -1
-                              || anchor.closest('.language-selector')
-                              || anchor.closest('.js-language-selector')
-                              || anchor.closest('#_desktop_language_selector')
-                              || anchor.closest('#_mobile_language_selector');
+                              || href.indexOf('id_lang=') !== -1;
                     if (!isLang) return;
+                    if (window.__orpMonitorEnqueue) {
+                        try { window.__orpMonitorEnqueue('orp:lang-blocker-fired', {
+                            href: href.substring(0, 200),
+                        }); } catch (e2) {}
+                    }
                     ev.stopImmediatePropagation();
                 } catch (e) {}
             }, true);
@@ -1152,6 +1165,37 @@
             var doc = visit && visit.to && visit.to.document ? visit.to.document : null;
             if (!doc) return false;
             var $ = window.jQuery || window.$;
+
+            // Sledgehammer fallback for ZOneTheme home: if the target URL
+            // is the language root (`/`, `/fr/`, `/en/`...) AND the active
+            // theme preset is zonetheme, ALWAYS force-reload regardless
+            // of slider DOM detection. The v2.5.5 detection-based check
+            // failed in production (monitor log 2026-04-30T09:14:16Z:
+            // visit:start product → /en/ swapped without triggering the
+            // reload, sliders stayed dead). The home page is the only
+            // page that bundles slider-heavy content in ZOneTheme so
+            // this URL-based shortcut is reliable and bulletproof.
+            try {
+                var toUrl  = (visit && visit.to && visit.to.url) ? visit.to.url : '';
+                var toPath = '';
+                if (toUrl) {
+                    try { toPath = new URL(toUrl, window.location.origin).pathname; }
+                    catch (e) { toPath = toUrl; }
+                }
+                // Match `/`, `/fr`, `/fr/`, `/en/`, `/de/`, etc. — language-
+                // prefixed root or bare root.
+                var isHome = toPath === '/' || /^\/[a-z]{2}\/?$/.test(toPath);
+                if (isHome && CONFIG.themePreset === 'zonetheme') {
+                    dlog('forceReload: target is ZOneTheme home', toPath);
+                    if (window.__orpMonitorEnqueue) {
+                        try { window.__orpMonitorEnqueue('orp:force-reload', {
+                            reason: 'zonetheme-home', target: toPath,
+                        }); } catch (e2) {}
+                    }
+                    return true;
+                }
+            } catch (e) {}
+
             if (!$ || !$.fn) return false;
 
             // Slick — used by home blocks, brand logos, featured categories.
@@ -1162,21 +1206,25 @@
             );
             if (hasSlick && typeof $.fn.slick !== 'function') {
                 dlog('forceReload: target has slick slider but $.fn.slick missing');
+                if (window.__orpMonitorEnqueue) {
+                    try { window.__orpMonitorEnqueue('orp:force-reload', {
+                        reason: 'slick-missing',
+                    }); } catch (e) {}
+                }
                 return true;
             }
 
             // NivoSlider — used by the home hero (#aoneSlider) and the
             // category slideshow.
             var hasNivo = doc.querySelector('#aoneSlider, .js-category-slider');
-            if (hasNivo) {
-                // Already initialized? NivoSlider sets `nivoSlider` data flag
-                // and adds `.nivoSlider` class. If the live target image isn't
-                // initialized AND $.fn.nivoSlider isn't global, we can't init.
-                var liveAlreadyInited = false; // we only have target doc here
-                if (typeof $.fn.nivoSlider !== 'function' && !liveAlreadyInited) {
-                    dlog('forceReload: target has nivoSlider but $.fn.nivoSlider missing');
-                    return true;
+            if (hasNivo && typeof $.fn.nivoSlider !== 'function') {
+                dlog('forceReload: target has nivoSlider but $.fn.nivoSlider missing');
+                if (window.__orpMonitorEnqueue) {
+                    try { window.__orpMonitorEnqueue('orp:force-reload', {
+                        reason: 'nivoSlider-missing',
+                    }); } catch (e) {}
                 }
+                return true;
             }
 
             return false;
