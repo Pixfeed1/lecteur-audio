@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.5.3
+ * OnlyRoots Persistent Audio Player — v2.5.5
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.5.3
+ * @version   2.5.5
  */
 (function () {
     'use strict';
@@ -1060,6 +1060,132 @@
         } catch (e) {}
     }
 
+    // Sidebar column sync — fixes Bug 3 ("left column disappears on
+    // category navigation"). The default Swup container `#content-wrapper`
+    // is a sibling of `#left-column` / `#right-column` (cf. ZOneTheme
+    // layout-both-columns.tpl: `<div class="row"> <div id="left-column">
+    // <div id="content-wrapper"> <div id="right-column">`). Swapping only
+    // `#content-wrapper` means the sidebar columns from the new page are
+    // never inserted into the live DOM, so navigating from a layout WITHOUT
+    // a left column (home, full-width pages) to one WITH a left column
+    // (category, contact) results in a missing column.
+    //
+    // We solve this in `before:content:replace` (called below) by peeking
+    // at the freshly-fetched target document and reconciling the sidebar
+    // state against the live DOM:
+    //   - target has the column, live doesn't  → insert
+    //   - target lacks the column, live has it → remove
+    //   - both have it                         → replace innerHTML so
+    //                                            faceted-search filters
+    //                                            update between categories
+    function syncSidebarColumn(targetDoc, columnId, liveContentWrapper) {
+        try {
+            if (!targetDoc || !liveContentWrapper) return;
+            var targetCol = targetDoc.getElementById(columnId);
+            var liveCol   = document.getElementById(columnId);
+
+            if (targetCol && !liveCol) {
+                // Insert: prepend before #content-wrapper for left-column,
+                // append after for right-column. Use cloneNode(true) so
+                // we don't mutate the parsed document.
+                var fresh = targetCol.cloneNode(true);
+                if (columnId === 'left-column') {
+                    liveContentWrapper.parentNode.insertBefore(fresh, liveContentWrapper);
+                } else {
+                    if (liveContentWrapper.nextSibling) {
+                        liveContentWrapper.parentNode.insertBefore(fresh, liveContentWrapper.nextSibling);
+                    } else {
+                        liveContentWrapper.parentNode.appendChild(fresh);
+                    }
+                }
+                dlog('syncSidebarColumn inserted', columnId);
+            } else if (!targetCol && liveCol) {
+                liveCol.parentNode.removeChild(liveCol);
+                dlog('syncSidebarColumn removed', columnId);
+            } else if (targetCol && liveCol) {
+                liveCol.innerHTML = targetCol.innerHTML;
+                dlog('syncSidebarColumn replaced contents of', columnId);
+            }
+        } catch (e) {
+            dlog('syncSidebarColumn error', columnId, e);
+        }
+    }
+
+    function syncSidebarColumns(visit) {
+        try {
+            var doc = visit && visit.to && visit.to.document ? visit.to.document : null;
+            if (!doc) return;
+            var liveCw = document.getElementById('content-wrapper');
+            if (!liveCw || !liveCw.parentNode) return;
+            syncSidebarColumn(doc, 'left-column',  liveCw);
+            syncSidebarColumn(doc, 'right-column', liveCw);
+        } catch (e) {
+            dlog('syncSidebarColumns error', e);
+        }
+    }
+
+    // Slider re-init feasibility check — fixes Bug 1 ("home top block
+    // doesn't display after navigation back"). ZOneTheme bundles Slick
+    // and NivoSlider via webpack into `aone-module.js`. The plugin
+    // registration `$.fn.slick = ...` and `$.fn.nivoSlider = ...` happens
+    // on the WEBPACK-SCOPED jQuery instance, NOT on the global one we
+    // can see from our preset. So `window.jQuery.fn.slick` is undefined.
+    // Our preset's slider re-init guard `if (!$.fn.slick) return 0`
+    // bails out silently and the home block sliders stay broken after
+    // every Swup-back-to-home navigation.
+    //
+    // We detect this case here: if the target page has slider DOM but
+    // global jQuery lacks the plugin needed to re-init it, we flag the
+    // visit for an immediate full reload right after the swap completes.
+    // The user sees a brief unstyled flash of the new home then a clean
+    // reload that re-runs the webpack boot script and re-init sliders
+    // properly.
+    //
+    // This only triggers when:
+    //   - target HTML contains an unitialized slider DOM element
+    //   - the matching plugin is missing on the global jQuery
+    // → categories/products/CMS pages still navigate via Swup normally
+    //   (no slider DOM = no force reload). Only home (and any other page
+    //   with sliders) falls back to full reload.
+    function targetRequiresPluginsWeDontHave(visit) {
+        try {
+            var doc = visit && visit.to && visit.to.document ? visit.to.document : null;
+            if (!doc) return false;
+            var $ = window.jQuery || window.$;
+            if (!$ || !$.fn) return false;
+
+            // Slick — used by home blocks, brand logos, featured categories.
+            var hasSlick = doc.querySelector(
+                '.js-home-block-slider:not(.slick-initialized),' +
+                '.js-brand-logo-slider:not(.slick-initialized),' +
+                '.js-featured-categories-slider:not(.slick-initialized)'
+            );
+            if (hasSlick && typeof $.fn.slick !== 'function') {
+                dlog('forceReload: target has slick slider but $.fn.slick missing');
+                return true;
+            }
+
+            // NivoSlider — used by the home hero (#aoneSlider) and the
+            // category slideshow.
+            var hasNivo = doc.querySelector('#aoneSlider, .js-category-slider');
+            if (hasNivo) {
+                // Already initialized? NivoSlider sets `nivoSlider` data flag
+                // and adds `.nivoSlider` class. If the live target image isn't
+                // initialized AND $.fn.nivoSlider isn't global, we can't init.
+                var liveAlreadyInited = false; // we only have target doc here
+                if (typeof $.fn.nivoSlider !== 'function' && !liveAlreadyInited) {
+                    dlog('forceReload: target has nivoSlider but $.fn.nivoSlider missing');
+                    return true;
+                }
+            }
+
+            return false;
+        } catch (e) {
+            dlog('targetRequiresPluginsWeDontHave error', e);
+            return false;
+        }
+    }
+
     /**
      * Resolves the configured container selector(s) to an actual DOM element.
      * The setting accepts comma-separated selectors as fallbacks. We try them
@@ -1359,12 +1485,38 @@
                         s.setAttribute('data-swup-ignore-script', '');
                     }
                 });
+
+                // Detect target pages that need jQuery plugins we can't
+                // reach (webpack-scoped). Flag the visit so the post-swap
+                // handler forces a clean full reload.
+                if (targetRequiresPluginsWeDontHave(visit)) {
+                    visit.__orpForceReload = true;
+                }
+
+                // Synchronize sidebar columns BEFORE Swup swaps #content-wrapper.
+                // Doing it here means the columns are in place when the new
+                // products land, and any layout-dependent JS (faceted search
+                // facets, sticky positioning) sees the right structure on
+                // first paint.
+                syncSidebarColumns(visit);
             } catch (e) {
                 dlog('before:content:replace error', e);
             }
         });
 
         swupInstance.hooks.on('content:replace', function (visit) {
+            // Force-reload short-circuit: if the target needs plugins we
+            // can't see (Slick / NivoSlider in webpack scope), short-circuit
+            // the rest of this handler and trigger a full reload. The swap
+            // already landed so the browser reloads from the right URL,
+            // and the boot script re-runs and re-init sliders cleanly.
+            if (visit && visit.__orpForceReload) {
+                try { window.location.replace(visit.to.url); } catch (e) {
+                    window.location.href = visit.to.url;
+                }
+                return;
+            }
+
             // SAFETY NET: catastrophic swap detection, deferred. The v2.4.5
             // detector ran inline in this hook but the v2.4.5 monitor capture
             // proved Swup's class manipulation on <html> happens AFTER our

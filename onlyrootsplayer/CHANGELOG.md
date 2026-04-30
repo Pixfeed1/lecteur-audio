@@ -3,6 +3,100 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.5] — 2026-04-30
+
+Two fixes for client-confirmed bugs (after the v2.5.2 deploy + the
+v2.5.4 module-disable A/B test that proved the bugs were ours).
+
+### Fixed — Bug 3: left/right column disappears on category navigation
+
+**Root cause.** ZOneTheme renders the sidebar columns and the main
+content as **siblings** under `.row` (cf. extracted v2.7.3 source
+`templates/layouts/layout-both-columns.tpl`):
+
+```html
+<div class="row">
+  <div id="left-column">...</div>          ← sibling
+  <div id="content-wrapper">...</div>      ← Swup container
+  <div id="right-column">...</div>         ← sibling
+</div>
+```
+
+Swup only swaps `#content-wrapper`. When navigating from a layout
+WITHOUT a sidebar (home, full-width pages) to one WITH a sidebar
+(category, contact, search), the new HTML brings a `#left-column`
+that never reaches the live DOM — only `#content-wrapper`'s contents
+do. Result: category page shown without its faceted-search filters.
+
+The reverse case is the same problem inverted: category → home
+keeps the stale category filters in `#left-column` because we never
+removed it on the swap.
+
+**Fix.** New `syncSidebarColumns(visit)` helper called from the
+`before:content:replace` hook. For each of `#left-column` and
+`#right-column`:
+
+- target has it, live doesn't  → insert (cloned) at the right sibling
+  position (before `#content-wrapper` for left, after for right)
+- target lacks it, live has it → remove from live DOM
+- both have it                 → replace `innerHTML` so the
+                                  faceted-search filters refresh
+                                  between categories
+
+Runs before the main `#content-wrapper` swap so the columns are in
+place when the new products land — any layout-dependent JS sees the
+correct structure on first paint.
+
+### Fixed — Bug 1: home top block doesn't display after navigation back
+
+**Root cause.** ZOneTheme bundles Slick and NivoSlider via webpack
+into `aone-module.js`. The plugin registration
+`$.fn.slick = ... ; $.fn.nivoSlider = ...` happens on the
+**webpack-scoped** jQuery instance, not on `window.jQuery`. Our
+ZOneTheme preset (`views/js/themes/zonetheme.js`) reads `$.fn.slick`
+from the global jQuery and silently bails out when it's undefined
+(cf. `reinitHomeBlockSliders`, `reinitBrandLogoSliders`,
+`reinitFeaturedCategoriesSliders`, `reinitAoneSlider`). The
+`aone-module.js` bundled IIFE only runs at first page load, so after
+a Swup nav-back-to-home it never re-executes and the slider DOM
+stays empty.
+
+**Fix.** New `targetRequiresPluginsWeDontHave(visit)` helper called
+from `before:content:replace`. It inspects the freshly-fetched
+target document for slider DOM (`#aoneSlider`,
+`.js-home-block-slider`, `.js-brand-logo-slider`,
+`.js-featured-categories-slider`, `.js-category-slider`). When it
+finds slider DOM AND the corresponding plugin (`$.fn.slick` or
+`$.fn.nivoSlider`) is missing on the global jQuery, it flags the
+visit with `__orpForceReload`. The post-swap `content:replace`
+handler reads that flag and short-circuits with
+`window.location.replace(visit.to.url)` — a clean full reload that
+re-runs the webpack boot script and re-initializes the sliders
+properly.
+
+Trade-off: the user sees a brief flash of the new home (already
+swapped in by Swup) before the reload kicks in. This is the cost
+of avoiding having to ship our own copies of Slick + NivoSlider as
+global libs (which would solve the issue more elegantly but bloat
+the module by ~150KB and create a maintenance burden for plugin
+updates). Only triggers when navigating TO a page with sliders — all
+other navigation (product, category, CMS) stays a clean Swup swap.
+
+### Why we picked these fixes (v2.5.4 module-disable test)
+
+The client uninstalled the module on production after v2.5.2 and
+confirmed that disabling the module makes Bug 1, Bug 3 and Bug 4
+all disappear. With the module re-enabled the bugs reappear. This
+proved the module is responsible for all three (the v2.5.4 audit of
+ZOneTheme source confirmed the layout / plugin-scoping mechanisms
+above).
+
+A separate "8→6 columns" issue and a BO error in the "Best Sellers"
+home block reported in the same email are NOT related to this
+module — they were edits the operator had made directly in theme
+files that got overwritten during the PrestaShop migration. Out of
+scope for this changelog.
+
 ## [2.5.4] — 2026-04-30
 
 Operator opt-in toggle for re-including the Contact page in Swup
