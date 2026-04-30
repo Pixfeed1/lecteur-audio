@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.5.2
+ * @version   2.5.3
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -80,7 +80,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.5.2';
+        $this->version          = '2.5.3';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -927,7 +927,42 @@ class OnlyRootsPlayer extends Module
         if (!self::audioSourceAvailable()) {
             return '';
         }
+        // Don't render the persistent player on pages we've excluded from
+        // Swup (contact, sitemap, stores...). Those pages get a full reload
+        // so the audio is interrupted anyway, and showing the player with
+        // a stale track from a possibly-disabled product is confusing
+        // (operator-confirmed feedback after v2.5.2: the contact page kept
+        // displaying the previously-played title even after the product was
+        // disabled in the catalogue).
+        if ($this->isCurrentRequestExcludedFromSwup()) {
+            return '';
+        }
         return $this->fetch('module:' . $this->name . '/views/templates/hook/player-footer.tpl');
+    }
+
+    /**
+     * Returns true when the current front request URL matches one of the
+     * Swup exclusion patterns (built from PrestaShop standard pages
+     * `contact`, `sitemap`, `stores`, plus any operator-supplied extras
+     * via `ORP_EXTRA_EXCLUDES`). Used by `hookDisplayFooter` to suppress
+     * the persistent player on those pages.
+     */
+    private function isCurrentRequestExcludedFromSwup()
+    {
+        try {
+            $currentPath = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
+            if ($currentPath === '') {
+                return false;
+            }
+            $currentLower = strtolower($currentPath);
+            foreach ($this->getSwupExcludePaths() as $pattern) {
+                if ($pattern === '' || $pattern === null) continue;
+                if (strpos($currentLower, strtolower((string) $pattern)) !== false) {
+                    return true;
+                }
+            }
+        } catch (Exception $e) {}
+        return false;
     }
 
     /**

@@ -3,6 +3,59 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.3] — 2026-04-30
+
+Targeted fixes for two operator-confirmed bugs after the v2.5.2 deploy.
+
+### Fixed — persistent player visible on excluded pages
+
+The player kept rendering at the bottom of pages that are intentionally
+excluded from Swup (`Contact`, `Sitemap`, `Stores`). On those pages the
+SPA navigation is bypassed (full reload), so audio is interrupted on
+arrival anyway, and the empty player UI sat there displaying whatever
+title was loaded before — confusing when the previously-played product
+had been disabled in the back-office (it appeared the player was "still
+playing" a removed product).
+
+`hookDisplayFooter` now short-circuits with an empty string when the
+current request URL matches one of the Swup exclusion patterns. The
+helper `isCurrentRequestExcludedFromSwup()` reuses the same pattern
+list (`getSwupExcludePaths()`) the JS side uses, so adding a path to
+`ORP_EXTRA_EXCLUDES` automatically hides the player on it too.
+
+### Fixed — language switcher on product page leaves content empty
+
+Operator screenshot after v2.5.2 showed a blank container after
+clicking the FR→EN flag on a product page. Two failure modes
+collaborate to defeat the existing `:not([data-iso-code])` exclusion:
+
+1. PrestaShop's `url entity='language'` helper renders `?id_lang=N`
+   URLs. The 2-letter-prefix heuristic in `ignoreVisit` doesn't fire
+   (path is unchanged, only the query differs).
+2. Some themes wrap the language link inside markup that doesn't carry
+   `data-iso-code` directly on the `<a>` element (the attribute lives
+   on a parent or a sibling, depending on theme version).
+
+v2.5.3 adds a defence-in-depth layer:
+
+- New `tagLanguageLinks()` runs at init and after every successful
+  Swup `content:replace`. It flags every detectable language trigger
+  (`a[data-iso-code]`, `a[href*="id_lang="]`,
+  `.language-selector a`, `.js-language-selector a`,
+  `#_desktop_language_selector a`, `#_mobile_language_selector a`)
+  with `data-no-swup="true"`. The Swup linkSelector already excludes
+  `[data-no-swup]`.
+- New capture-phase click listener (`bindLanguageCaptureBlocker`)
+  installed once on `document`. Fires BEFORE Swup's bubble-phase
+  delegated handler and calls `stopImmediatePropagation()` on any
+  click matching the same heuristic. Doesn't `preventDefault()` —
+  the browser still navigates, just via a normal full reload instead
+  of being intercepted by Swup.
+
+Modifier-key clicks (`ctrl/meta/shift/alt` or non-primary buttons) are
+ignored in the capture-phase blocker so users can still open the
+language link in a new tab.
+
 ## [2.5.2] — 2026-04-30
 
 Polish release based on direct client feedback after deploying 2.5.1.

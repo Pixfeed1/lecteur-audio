@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.5.2
+ * OnlyRoots Persistent Audio Player — v2.5.3
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.5.2
+ * @version   2.5.3
  */
 (function () {
     'use strict';
@@ -992,6 +992,74 @@
         return false;
     }
 
+    // Defensive double-exclusion for language-switch links.
+    //
+    // Primary defence is the `:not([data-iso-code])` clause in the Swup
+    // linkSelector, plus the 2-letter-prefix heuristic in ignoreVisit.
+    // Both are brittle:
+    //   - Themes that don't carry `data-iso-code` (custom selectors,
+    //     wrapped buttons, JS-driven `location.href` writes) bypass it.
+    //   - PS's `url entity='language'` helper renders `?id_lang=N` URLs,
+    //     which the prefix heuristic can't detect (path is unchanged).
+    // Operator-confirmed bug post-v2.5.2: switching language on a product
+    // page swapped empty content into the container.
+    //
+    // This function flags every detectable language trigger with
+    // `data-no-swup` so the Swup selector excludes them. It runs once at
+    // init AND after every successful content:replace (the freshly-swapped
+    // selector inside the new container needs re-tagging).
+    function tagLanguageLinks(root) {
+        try {
+            var scope = root || document;
+            var anchors = scope.querySelectorAll(
+                'a[data-iso-code],' +
+                'a[href*="id_lang="],' +
+                '.language-selector a[href],' +
+                '.js-language-selector a[href],' +
+                '#_desktop_language_selector a[href],' +
+                '#_mobile_language_selector a[href]'
+            );
+            for (var i = 0; i < anchors.length; i++) {
+                anchors[i].setAttribute('data-no-swup', 'true');
+            }
+        } catch (e) {}
+    }
+
+    // Capture-phase fail-safe: even if the link somehow escapes the Swup
+    // selector (e.g. dynamically inserted after a swap, before our
+    // tagLanguageLinks pass runs), this listener fires BEFORE Swup's
+    // delegated bubble-phase handler and stops propagation so the browser
+    // performs a normal full-reload navigation.
+    //
+    // We don't preventDefault — only stop the event from bubbling into
+    // Swup's delegated click handler.
+    var __orpLangCaptureBound = false;
+    function bindLanguageCaptureBlocker() {
+        if (__orpLangCaptureBound) return;
+        __orpLangCaptureBound = true;
+        try {
+            document.addEventListener('click', function (ev) {
+                try {
+                    if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+                    var target = ev.target;
+                    if (!target || !target.closest) return;
+                    var anchor = target.closest('a[href]');
+                    if (!anchor) return;
+                    var href = anchor.getAttribute('href') || '';
+                    var isLang = anchor.hasAttribute('data-iso-code')
+                              || anchor.hasAttribute('data-no-swup')
+                              || href.indexOf('id_lang=') !== -1
+                              || anchor.closest('.language-selector')
+                              || anchor.closest('.js-language-selector')
+                              || anchor.closest('#_desktop_language_selector')
+                              || anchor.closest('#_mobile_language_selector');
+                    if (!isLang) return;
+                    ev.stopImmediatePropagation();
+                } catch (e) {}
+            }, true);
+        } catch (e) {}
+    }
+
     /**
      * Resolves the configured container selector(s) to an actual DOM element.
      * The setting accepts comma-separated selectors as fallbacks. We try them
@@ -1328,6 +1396,11 @@
             }, 0);
 
             scheduleInject();
+            // Re-tag language switcher triggers in the freshly-swapped DOM.
+            // The capture-phase blocker is process-wide so it stays bound,
+            // but `data-no-swup` attributes only exist on the live nodes
+            // inside the new container.
+            tagLanguageLinks();
             try {
                 if (typeof window.prestashop !== 'undefined' && typeof window.prestashop.emit === 'function') {
                     // The `reason` payload is mandatory for some third-party
@@ -1582,6 +1655,10 @@
         capturePersistentBodyClasses();
         detachPlayerToBody();
         bindEvents();
+        // Language-switcher hardening: tag known triggers + install
+        // capture-phase fail-safe before Swup's delegated handler binds.
+        tagLanguageLinks();
+        bindLanguageCaptureBlocker();
 
         var swupOk = initSwup();
         dlog('init complete, swup =', swupOk);
