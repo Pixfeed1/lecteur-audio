@@ -3,6 +3,63 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.11] — 2026-04-30
+
+Tighter listener-stacking ignore-script regex.
+
+### Why
+
+A parallel review session pointed out three patterns the v2.5.10
+regex didn't catch — including the one that actually causes the
+dropdown bug we're trying to fix:
+
+1. `$(window).on('load', ...)` — v2.5.10 required `$(document)`
+   literally. ZOneTheme `_aonemegamenu.js` (line 213) calls
+   `mobileToggleEvent()` + `enableHoverMenuOnTablet()` from a
+   `$(window).on('load', ...)` block without `.off()`. If that ends
+   up inlined anywhere, every swap stacks one more.
+2. `$('.js-dropdown').on('show.bs.dropdown', ...)` — v2.5.10's
+   `.on(['"]click['"]` only matched click events. ZOneTheme
+   `drop-down.js` lines 27-44 binds Bootstrap dropdown lifecycle
+   events on `.js-dropdown`, which has been the literal source
+   of the "dropdown opens then closes itself" symptom.
+3. `window.addEventListener(...)` / `el.addEventListener(...)` —
+   v2.5.10 required `document.` prefix. Plenty of theme scripts
+   bind on `window` (scroll listeners) or arbitrary elements.
+
+### Fix
+
+Broadened the regex from:
+
+```
+/var\s+prestashop\s*=|prestashop\.(on|emit)\(|
+ \$\(\s*document\s*\)\.on\(|document\.addEventListener\(|
+ \.on\(['"]click['"]/
+```
+
+to:
+
+```
+/var\s+prestashop\s*=|prestashop\.(on|emit)\(|
+ \$\(\s*[^)]+\s*\)\.on\(|addEventListener\(/
+```
+
+Changes:
+- `\$\(\s*document\s*\)\.on\(` → `\$\(\s*[^)]+\s*\)\.on\(` —
+  matches any jQuery selector argument, not just `document`
+- `document\.addEventListener\(` → `addEventListener\(` — matches
+  any `.addEventListener` on any host
+- Dropped the now-redundant `.on(['"]click['"]` clause; the new
+  `\$\(\s*[^)]+\s*\)\.on\(` covers any event name including click
+
+### Trade-off
+
+The wider net catches more legitimate inits that "happen to also
+bind a listener". We accept that, same reasoning as v2.5.10:
+listener stacking is a chronic user-visible bug, a missed init is
+at worst a widget that doesn't refresh. `data-swup-reload-script`
+remains the operator escape hatch for the rare cases.
+
 ## [2.5.10] — 2026-04-30
 
 Structural fix for the recurring listener-stacking bug pattern.

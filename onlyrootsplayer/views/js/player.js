@@ -1,5 +1,5 @@
 /**
- * OnlyRoots Persistent Audio Player — v2.5.10
+ * OnlyRoots Persistent Audio Player — v2.5.11
  *
  * Theme-agnostic, works on any PrestaShop 8 theme. The previous theme-coupled
  * code (ZOneTheme megamenu reinit, server-side debug logger, hardcoded French
@@ -17,7 +17,7 @@
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   2.5.10
+ * @version   2.5.11
  */
 (function () {
     'use strict';
@@ -1506,21 +1506,35 @@
         //     re-running it would clobber the live emitter object)
         //   - `prestashop.on(` / `prestashop.emit(` — module re-binds
         //     would stack listeners on the live emitter
-        //   - `$(document).on(` — jQuery delegation, classic listener-stack
-        //     trigger
-        //   - `document.addEventListener(` — vanilla equivalent
-        //   - `.on('click'` / `.on("click"` — generic jQuery click bind
-        //     (catches Bootstrap-style data-toggle delegation)
+        //   - `$(<anything>).on(` — any jQuery binding (document, window,
+        //     selector, this, etc.). v2.5.10 only matched `$(document)`
+        //     and `.on('click')` which let through ZOneTheme's
+        //     `$('.js-dropdown').on('show.bs.dropdown', ...)` —
+        //     LITERALLY the source of the dropdown bug.
+        //   - `addEventListener(` — any vanilla listener registration,
+        //     not just `document.addEventListener(`. Catches
+        //     `window.addEventListener('scroll', ...)`,
+        //     `el.addEventListener('click', ...)`, etc.
         //
         // Trade-off: an inline init script that legitimately needs to
         // re-run on every page (e.g. one that reads `<script>var ctx = ...`
-        // for page-specific config) and ALSO happens to call
-        // `$(document).on(...)` will be skipped. We accept that — listener
+        // for page-specific config) and ALSO happens to call a listener-
+        // binding pattern will be skipped. We accept that — listener
         // stacking is a far worse failure mode than a one-off init that
         // doesn't run. Authors who need a script ALWAYS re-executed can
         // explicitly mark it `data-swup-reload-script` in their template,
         // which takes priority over our heuristic.
-        var IGNORE_SCRIPT_PATTERNS = /var\s+prestashop\s*=|prestashop\.(on|emit)\(|\$\(\s*document\s*\)\.on\(|document\.addEventListener\(|\.on\(['"]click['"]/;
+        //
+        // History:
+        //   v2.0.0  — initial regex: only `var prestashop = {...}`
+        //   v2.5.10 — added `prestashop.on/emit`, `$(document).on(`,
+        //             `document.addEventListener(`, `.on('click'`
+        //   v2.5.11 — broadened to catch the patterns v2.5.10 missed:
+        //             any `$(...)`, any `.addEventListener(`. Diagnosed
+        //             by a parallel review session reading ZOneTheme
+        //             source line-by-line (drop-down.js,
+        //             _aonemegamenu.js).
+        var IGNORE_SCRIPT_PATTERNS = /var\s+prestashop\s*=|prestashop\.(on|emit)\(|\$\(\s*[^)]+\s*\)\.on\(|addEventListener\(/;
 
         swupInstance.hooks.before('content:replace', function (visit) {
             try {
