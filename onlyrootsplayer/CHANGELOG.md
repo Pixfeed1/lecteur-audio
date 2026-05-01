@@ -3,6 +3,74 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.13] — 2026-05-01
+
+Replaces the v2.5.12 dropdown fix with a manual click delegate
+because the v2.5.12 strategy was a silent no-op in production.
+
+### Why v2.5.12 didn't work
+
+v2.5.12 tried to dispose+recreate Bootstrap Dropdown instances via
+`window.bootstrap.Dropdown`. Verified in production console:
+`typeof window.bootstrap` returns `'undefined'` on ZOneTheme.
+Bootstrap 5 lives **inside** the theme's webpack bundle (`theme.js`)
+and the bundle never assigns its module export to a global. So the
+`if (BS && BS.Dropdown)` guard always took the false branch, the
+function returned 0 every time, and nothing happened. The bug was
+unfixed despite shipping the patch.
+
+### New strategy — manual click delegation
+
+Instead of trying to reach into Bootstrap's API, take over the
+dropdown open/close logic with our own click delegate on
+`document`. We don't reuse Bootstrap's class state — we **set the
+same classes Bootstrap would set** (`.show` on the
+`.dropdown-menu` and on the `.dropdown` container, `aria-expanded`
+on the toggle). The theme's CSS only cares about the class state,
+not about who set it, so the visual rendering is unchanged.
+
+Two functions:
+
+1. **`bindDropdownDelegateOnce()`** — installs a single click
+   listener on `document` (idempotent via
+   `window.__orpDropdownDelegateBound` flag). The listener:
+   - Walks up to 4 ancestors from the click target to find a
+     `[data-bs-toggle="dropdown"]` element (so clicks on `<span>`
+     or `<img>` children of the toggle still resolve)
+   - On a toggle click: `preventDefault` + `stopPropagation`,
+     close any other open dropdown first, then toggle `.show` and
+     `aria-expanded` on the target
+   - On any click outside an open `.dropdown-menu.show`: close all
+     open dropdowns
+   - Also installs a keydown listener on `Escape` that closes all
+     open dropdowns
+
+2. **`reinitBootstrapDropdowns($)`** — called from the preset
+   entry point on every Swup swap. Calls
+   `bindDropdownDelegateOnce()` (no-op if already bound), then
+   resets visual state: removes leftover `.show` classes from
+   menus and containers, sets `aria-expanded="false"` on every
+   toggle. This handles the phantom-open state where the user had
+   a dropdown open at the moment of nav, and the new page
+   inherited the open class on the persistent header. Returns the
+   count of toggles for telemetry.
+
+### Document survives Swup swaps
+
+The whole reason this works: `document` is never replaced by Swup,
+only the contents of the swap container are. So a single bind on
+`document` survives every navigation. We set the flag on `window`
+(not on a closure variable) so re-evaluation of the preset script
+itself doesn't re-bind.
+
+### Trade-off
+
+We lose access to Bootstrap's dropdown lifecycle events
+(`show.bs.dropdown`, `shown.bs.dropdown`, etc.). Verified that
+neither ZOneTheme nor PrestaShop core depends on them. If a
+third-party module relies on those events, it'll need to bind on
+the click directly instead.
+
 ## [2.5.12] — 2026-04-30
 
 Healing pass for Bootstrap Dropdown instances after Swup swaps.

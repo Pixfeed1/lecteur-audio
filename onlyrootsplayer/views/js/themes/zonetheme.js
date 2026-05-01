@@ -576,51 +576,202 @@
     }
 
     /* ============================================================ */
-    /*  BOOTSTRAP DROPDOWNS REINIT                                  */
+    /*  BOOTSTRAP DROPDOWNS — manual click delegation                */
     /* ============================================================ */
 
     /**
-     * Re-initialises every Bootstrap dropdown toggle in the live DOM.
+     * Why we don't use `window.bootstrap.Dropdown`:
      *
-     * After a Swup swap, dropdown toggles fall into one of two failure
-     * modes:
-     *   1. Host element REPLACED: Bootstrap's instance was on the old
-     *      element; the new one has none → click does nothing.
-     *   2. Host element NOT replaced but theme.js was re-evaluated by
-     *      swup-head-plugin → Bootstrap binds a SECOND instance →
-     *      click fires both → opens then immediately closes.
+     * ZOneTheme bundles Bootstrap 5 inside its webpack `theme.js`. The
+     * Dropdown class is registered on the bundle's local module scope
+     * — `window.bootstrap` is NOT exposed (verified in production
+     * console: `typeof window.bootstrap` returns `'undefined'`). So
+     * the v2.5.12 dispose+recreate strategy was a silent no-op; the
+     * `if (BS && BS.Dropdown)` guard always took the false branch and
+     * the function returned 0 every time.
      *
-     * Both healed by dispose+recreate. Idempotent.
+     * v2.5.13 takes a different approach: instead of trying to
+     * resurrect Bootstrap's per-element instance, we install our OWN
+     * click delegate on `document` and drive the dropdown open/close
+     * by toggling the SAME `.show` classes Bootstrap 5 uses. The
+     * theme's CSS continues to work without modification (the
+     * stylesheet only cares about the class state, not who set it).
+     *
+     * Because `document` is never swapped by Swup, the delegate
+     * survives every navigation. We bind it exactly once (idempotent
+     * via the `window.__orpDropdownDelegateBound` flag), and on each
+     * preset invocation we just reset visual state (close anything
+     * that was left open before swap, sync `aria-expanded`).
+     *
+     * Trade-off: any Bootstrap dropdown JS feature beyond plain
+     * open/close (e.g. programmatic API, dropdown lifecycle events
+     * `show.bs.dropdown` / `shown.bs.dropdown`) won't fire. ZOneTheme
+     * doesn't seem to depend on those — verified by inspecting the
+     * theme source — and PrestaShop core doesn't either. If a third-
+     * party module relies on the lifecycle events, it'll need to
+     * bind on our own clicks instead.
+     */
+
+    /**
+     * Closes every currently-open dropdown in the DOM. Used both as
+     * cleanup before opening a new one and on outside-click / Escape.
+     */
+    function closeAllOrpDropdowns() {
+        try {
+            var openMenus = document.querySelectorAll('.dropdown-menu.show');
+            for (var i = 0; i < openMenus.length; i++) {
+                openMenus[i].classList.remove('show');
+            }
+            var openContainers = document.querySelectorAll('.dropdown.show, .dropup.show, .dropend.show, .dropstart.show');
+            for (var j = 0; j < openContainers.length; j++) {
+                openContainers[j].classList.remove('show');
+            }
+            var expandedToggles = document.querySelectorAll('[data-bs-toggle="dropdown"][aria-expanded="true"]');
+            for (var k = 0; k < expandedToggles.length; k++) {
+                expandedToggles[k].setAttribute('aria-expanded', 'false');
+            }
+        } catch (e) {}
+    }
+
+    /**
+     * Resolves the dropdown toggle element from a click target. Walks
+     * up to 4 ancestors so a click on a child `<span>`/`<img>` inside
+     * the toggle button still resolves to the toggle. Returns null if
+     * no toggle is on the click path.
+     */
+    function findToggleAncestor(target) {
+        try {
+            var node = target;
+            for (var depth = 0; depth < 5 && node && node !== document; depth++) {
+                if (node.nodeType === 1 && node.getAttribute && node.getAttribute('data-bs-toggle') === 'dropdown') {
+                    return node;
+                }
+                node = node.parentNode;
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    /**
+     * Binds the click + keydown delegates on document exactly once
+     * per page session. Subsequent calls are no-ops.
+     *
+     * The flag is on `window` (not on a closure variable) so the
+     * delegate IS bound across module re-evaluations as long as the
+     * window survives — which it does, since we're a SPA.
+     */
+    function bindDropdownDelegateOnce() {
+        if (window.__orpDropdownDelegateBound) return;
+        window.__orpDropdownDelegateBound = true;
+
+        try {
+            document.addEventListener('click', function (ev) {
+                try {
+                    if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+                    var toggle = findToggleAncestor(ev.target);
+                    if (toggle) {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+
+                        // Find the parent .dropdown container and the menu sibling
+                        var container = toggle.closest('.dropdown, .dropup, .dropend, .dropstart');
+                        var menu = container ? container.querySelector(':scope > .dropdown-menu') : null;
+                        if (!menu) {
+                            // Fallback: next-sibling search if structure differs
+                            var sib = toggle.nextElementSibling;
+                            while (sib && !sib.classList.contains('dropdown-menu')) sib = sib.nextElementSibling;
+                            menu = sib;
+                        }
+
+                        var isOpen = menu && menu.classList.contains('show');
+
+                        // Close all OTHER dropdowns first
+                        var openMenus = document.querySelectorAll('.dropdown-menu.show');
+                        for (var i = 0; i < openMenus.length; i++) {
+                            if (openMenus[i] !== menu) openMenus[i].classList.remove('show');
+                        }
+                        var openContainers = document.querySelectorAll('.dropdown.show, .dropup.show, .dropend.show, .dropstart.show');
+                        for (var j = 0; j < openContainers.length; j++) {
+                            if (openContainers[j] !== container) openContainers[j].classList.remove('show');
+                        }
+                        var expandedToggles = document.querySelectorAll('[data-bs-toggle="dropdown"][aria-expanded="true"]');
+                        for (var k = 0; k < expandedToggles.length; k++) {
+                            if (expandedToggles[k] !== toggle) expandedToggles[k].setAttribute('aria-expanded', 'false');
+                        }
+
+                        // Toggle target
+                        if (isOpen) {
+                            if (menu) menu.classList.remove('show');
+                            if (container) container.classList.remove('show');
+                            toggle.setAttribute('aria-expanded', 'false');
+                        } else {
+                            if (menu) menu.classList.add('show');
+                            if (container) container.classList.add('show');
+                            toggle.setAttribute('aria-expanded', 'true');
+                        }
+                        return;
+                    }
+
+                    // Outside-click on an open dropdown menu → close all
+                    var insideMenu = ev.target && ev.target.closest && ev.target.closest('.dropdown-menu.show');
+                    if (!insideMenu) {
+                        closeAllOrpDropdowns();
+                    }
+                } catch (e) {
+                    safeWarn('[ORP zonetheme] dropdown delegate click handler error', e);
+                }
+            }, false);
+
+            document.addEventListener('keydown', function (ev) {
+                try {
+                    if (ev.key === 'Escape' || ev.keyCode === 27) {
+                        if (document.querySelector('.dropdown-menu.show')) {
+                            closeAllOrpDropdowns();
+                        }
+                    }
+                } catch (e) {}
+            }, false);
+        } catch (e) {
+            safeWarn('[ORP zonetheme] bindDropdownDelegateOnce top-level error', e);
+            // Reset the flag so a future preset invocation can retry
+            try { window.__orpDropdownDelegateBound = false; } catch (e2) {}
+        }
+    }
+
+    /**
+     * Called from the preset entry point on every Swup swap. Ensures
+     * the document-level click delegate is bound (once per session),
+     * then resets visual state on every toggle in the live DOM.
+     *
+     * The reset matters because if the user had a dropdown open at
+     * the moment they triggered the navigation, the new page would
+     * inherit a phantom `.show` class on the (persistent) toggle
+     * even though the menu is logically closed. Clearing
+     * `aria-expanded` and `.show` classes here keeps state honest.
      *
      * @param {jQuery} $
-     * @return {number}
+     * @return {number} count of toggles found in the live DOM
      */
     function reinitBootstrapDropdowns($) {
+        bindDropdownDelegateOnce();
         var processed = 0;
         try {
-            var BS = window.bootstrap;
-            if (BS && BS.Dropdown) {
-                var toggles = document.querySelectorAll('[data-bs-toggle="dropdown"]');
-                for (var i = 0; i < toggles.length; i++) {
-                    var el = toggles[i];
-                    try {
-                        var existing = BS.Dropdown.getInstance(el);
-                        if (existing) {
-                            try { existing.dispose(); } catch (e) {}
-                        }
-                        new BS.Dropdown(el);
-                        processed++;
-                    } catch (e) {
-                        safeWarn('[ORP zonetheme] dropdown reinit failed on element', e);
-                    }
-                }
-            } else if ($ && $.fn && $.fn.dropdown) {
-                var $toggles = $('[data-toggle="dropdown"]');
-                $toggles.dropdown();
-                processed = $toggles.length;
+            var toggles = document.querySelectorAll('[data-bs-toggle="dropdown"]');
+            processed = toggles.length;
+            for (var i = 0; i < toggles.length; i++) {
+                try { toggles[i].setAttribute('aria-expanded', 'false'); } catch (e) {}
+            }
+            // Clear any leftover .show classes
+            var openMenus = document.querySelectorAll('.dropdown-menu.show');
+            for (var j = 0; j < openMenus.length; j++) {
+                openMenus[j].classList.remove('show');
+            }
+            var openContainers = document.querySelectorAll('.dropdown.show, .dropup.show, .dropend.show, .dropstart.show');
+            for (var k = 0; k < openContainers.length; k++) {
+                openContainers[k].classList.remove('show');
             }
         } catch (e) {
-            safeWarn('[ORP zonetheme] reinitBootstrapDropdowns top-level error', e);
+            safeWarn('[ORP zonetheme] reinitBootstrapDropdowns reset error', e);
         }
         return processed;
     }
