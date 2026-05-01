@@ -1370,9 +1370,9 @@
             plugins.push(new window.SwupScriptsPlugin({ head: true, body: true }));
         }
         if (typeof window.SwupBodyClassPlugin === 'function') plugins.push(new window.SwupBodyClassPlugin());
-        if (typeof window.SwupPreloadPlugin === 'function') {
+        if (CONFIG.swupPreload && typeof window.SwupPreloadPlugin === 'function') {
             plugins.push(new window.SwupPreloadPlugin({
-                preloadHoveredLinks: !!CONFIG.swupPreload,
+                preloadHoveredLinks: true,
                 preloadVisibleLinks: false,
             }));
         }
@@ -1560,11 +1560,16 @@
                 }
 
                 // Synchronize sidebar columns BEFORE Swup swaps #content-wrapper.
-                // Doing it here means the columns are in place when the new
-                // products land, and any layout-dependent JS (faceted search
-                // facets, sticky positioning) sees the right structure on
-                // first paint.
-                syncSidebarColumns(visit);
+                // DISABLED in v2.5.15 — was corrupting #content-wrapper during
+                // the Contact → Home swap, leaving the home with a complete
+                // header+footer but an empty content area. Root cause: doing
+                // `liveCol.innerHTML = targetCol.innerHTML` BEFORE Swup's own
+                // swap pipeline interferes with Swup's internal node-tracking
+                // when the swap target is a sibling of the column. Function
+                // and helper are kept in the codebase so we can re-enable
+                // with a fixed implementation later (e.g. doing the column
+                // sync AFTER content:replace instead of before).
+                // syncSidebarColumns(visit);
             } catch (e) {
                 dlog('before:content:replace error', e);
             }

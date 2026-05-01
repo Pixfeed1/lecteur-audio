@@ -3,6 +3,84 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.15] — 2026-05-01
+
+### Fixed — empty home content after Contact → Home navigation
+
+Operator-confirmed in production: navigating from `/fr/nous-contacter`
+back to `/fr/` (or any Contact → Home flow) returned the home with
+its full header and footer but an EMPTY content area. Sliders absent,
+product grids absent — just a blank middle.
+
+**Root cause.** `syncSidebarColumns(visit)` was called from the
+`before:content:replace` hook (added in v2.5.5 to fix Bug 3, the
+"left column disappears on category navigation"). The function does:
+
+```js
+liveCol.innerHTML = targetCol.innerHTML;
+```
+
+on `#left-column` and `#right-column` BEFORE Swup runs its own swap
+pipeline. When the target page (home) doesn't have those columns OR
+has them at a different position relative to `#content-wrapper`, the
+write interferes with Swup's internal node tracking. Swup's
+content:replace then operates on a DOM that's already been mutated,
+and the swap silently fails for `#content-wrapper`.
+
+The Contact → Home flow specifically triggers this: Contact uses
+`layout-left-column.tpl`, Home uses `layout-full-width.tpl` (or
+similar without `#left-column`). The mismatch triggers the
+corruption path.
+
+**Fix.** Commented out the `syncSidebarColumns(visit)` call in the
+`before:content:replace` hook. The function and its `syncSidebarColumn`
+helper remain in the codebase, ready to be re-enabled with a fixed
+implementation (e.g. running AFTER `content:replace` instead of
+before, so Swup's swap completes first and we then reconcile sibling
+columns).
+
+**Trade-off.** Bug 3 (left column missing on home → category
+navigation) returns. Same root cause as before, fixed differently
+in a future patch. Audio continuity and home-after-contact rendering
+take priority — both are user-visible regressions, the missing left
+column is recoverable by reloading the page.
+
+## [2.5.14] — 2026-05-01
+
+### Fixed — SwupPreloadPlugin instantiated when disabled
+
+The plugin was always created with `preloadHoveredLinks: !!CONFIG.swupPreload`,
+meaning even when the operator had `ORP_SWUP_PRELOAD = 0` the plugin
+still ran with all its hooks plugged into the Swup pipeline (it just
+never actually preloaded anything). Wasted setup work and a potential
+source of subtle interference with other plugins in edge cases.
+
+**Fix.** Hoist the BO toggle check up to the instantiation guard:
+
+```js
+// before
+if (typeof window.SwupPreloadPlugin === 'function') {
+    plugins.push(new window.SwupPreloadPlugin({
+        preloadHoveredLinks: !!CONFIG.swupPreload,
+        preloadVisibleLinks: false,
+    }));
+}
+
+// after
+if (CONFIG.swupPreload && typeof window.SwupPreloadPlugin === 'function') {
+    plugins.push(new window.SwupPreloadPlugin({
+        preloadHoveredLinks: true,
+        preloadVisibleLinks: false,
+    }));
+}
+```
+
+Plugin is no longer instantiated when the toggle is off. Cleaner
+runtime when the operator hasn't opted in.
+
+This change did NOT fix the Contact-related bug (the v2.5.15 fix did),
+but it's kept in the same release as a tidy-up.
+
 ## [2.5.13] — 2026-05-01
 
 Replaces the v2.5.12 dropdown fix with a manual click delegate
