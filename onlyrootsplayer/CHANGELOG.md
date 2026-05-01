@@ -3,6 +3,47 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.12] — 2026-04-30
+
+Healing pass for Bootstrap Dropdown instances after Swup swaps.
+
+### Why
+
+The v2.5.11 listener-stacking ignore covers the common cases but
+Bootstrap dropdowns still have a parallel failure mode: when a
+swap either replaces the host element OR re-evaluates `theme.js`
+via `swup-head-plugin`, Bootstrap's Dropdown class either:
+
+1. Loses its instance entirely (host element is fresh) → the
+   toggle has nothing bound, click does nothing
+2. Gets a SECOND instance bound on top of the first (theme.js
+   re-evaluated) → click triggers both, opens then closes
+   immediately
+
+This is independent from the listener-stack issue we addressed at
+the document-level — it's about per-element instance state.
+
+### Fix
+
+New `reinitBootstrapDropdowns($)` helper in
+`views/js/themes/zonetheme.js`. For every
+`[data-bs-toggle="dropdown"]` in the live DOM, dispose the existing
+instance (if any) and create a fresh one. Idempotent — safe to call
+on every swap.
+
+Falls back to `$('[data-toggle="dropdown"]').dropdown()` for the
+Bootstrap 4 syntax in case a theme variant uses the older attribute.
+
+Wired into the preset entry point right after `rebindScrollToTop($)`
+so it runs as part of the normal post-swap healing pass. Surfaces
+the count in `orp:preset:invoked` telemetry as `bootstrapDropdowns`
+so the monitor confirms it ran on each swap.
+
+### Credit
+
+Diagnosis from the parallel review session reading both ZOneTheme
+source and Bootstrap 5's Dropdown class behavior under DOM mutation.
+
 ## [2.5.11] — 2026-04-30
 
 Tighter listener-stacking ignore-script regex.

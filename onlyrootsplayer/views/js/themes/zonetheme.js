@@ -576,6 +576,56 @@
     }
 
     /* ============================================================ */
+    /*  BOOTSTRAP DROPDOWNS REINIT                                  */
+    /* ============================================================ */
+
+    /**
+     * Re-initialises every Bootstrap dropdown toggle in the live DOM.
+     *
+     * After a Swup swap, dropdown toggles fall into one of two failure
+     * modes:
+     *   1. Host element REPLACED: Bootstrap's instance was on the old
+     *      element; the new one has none → click does nothing.
+     *   2. Host element NOT replaced but theme.js was re-evaluated by
+     *      swup-head-plugin → Bootstrap binds a SECOND instance →
+     *      click fires both → opens then immediately closes.
+     *
+     * Both healed by dispose+recreate. Idempotent.
+     *
+     * @param {jQuery} $
+     * @return {number}
+     */
+    function reinitBootstrapDropdowns($) {
+        var processed = 0;
+        try {
+            var BS = window.bootstrap;
+            if (BS && BS.Dropdown) {
+                var toggles = document.querySelectorAll('[data-bs-toggle="dropdown"]');
+                for (var i = 0; i < toggles.length; i++) {
+                    var el = toggles[i];
+                    try {
+                        var existing = BS.Dropdown.getInstance(el);
+                        if (existing) {
+                            try { existing.dispose(); } catch (e) {}
+                        }
+                        new BS.Dropdown(el);
+                        processed++;
+                    } catch (e) {
+                        safeWarn('[ORP zonetheme] dropdown reinit failed on element', e);
+                    }
+                }
+            } else if ($ && $.fn && $.fn.dropdown) {
+                var $toggles = $('[data-toggle="dropdown"]');
+                $toggles.dropdown();
+                processed = $toggles.length;
+            }
+        } catch (e) {
+            safeWarn('[ORP zonetheme] reinitBootstrapDropdowns top-level error', e);
+        }
+        return processed;
+    }
+
+    /* ============================================================ */
     /*  PRESET ENTRY POINT                                          */
     /* ============================================================ */
 
@@ -614,6 +664,10 @@
         rebindSidebars($);
         rebindScrollToTop($);
 
+        // Bootstrap dropdowns (language selector, currency, account menu).
+        // Swup either nukes the per-element instance or duplicates it.
+        var dropdownsReinit = reinitBootstrapDropdowns($);
+
         // AJAX megamenu dropdown content. Returns true if the AJAX request
         // was fired (placeholders existed and the controller URL is known).
         // The actual dropdown HTML is replaced asynchronously in the
@@ -632,15 +686,16 @@
         if (typeof window.__orpMonitorEnqueue === 'function') {
             try {
                 window.__orpMonitorEnqueue('orp:preset:invoked', {
-                    preset:           'zonetheme',
-                    aoneSlider:       sliders.aone,
-                    homeBlockSliders: sliders.home,
-                    brandSliders:     sliders.brand,
-                    featuredSliders:  sliders.featured,
-                    stickyHeader:     stickyOk ? 1 : 0,
-                    megamenuAjax:     megamenuAjaxFired ? 1 : 0,
-                    lazyImages:       lazyImagesHooked,
-                    rtl:              rtl ? 1 : 0,
+                    preset:             'zonetheme',
+                    aoneSlider:         sliders.aone,
+                    homeBlockSliders:   sliders.home,
+                    brandSliders:       sliders.brand,
+                    featuredSliders:    sliders.featured,
+                    stickyHeader:       stickyOk ? 1 : 0,
+                    megamenuAjax:       megamenuAjaxFired ? 1 : 0,
+                    lazyImages:         lazyImagesHooked,
+                    bootstrapDropdowns: dropdownsReinit,
+                    rtl:                rtl ? 1 : 0,
                 });
             } catch (e) {}
         }
