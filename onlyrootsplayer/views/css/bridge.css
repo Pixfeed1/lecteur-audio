@@ -1,0 +1,149 @@
+/**
+ * OnlyRoots Persistent Audio Player — bridge.css (parent-side, v3.0.1)
+ *
+ * Styles for elements injected into the parent page DOM:
+ *   - `.orp-play-btn-inline`     : the inline play button on product cards
+ *   - `body.orp-has-player`      : body class added when iframe is visible
+ *                                  (provides bottom padding so the iframe
+ *                                  doesn't hide page content)
+ *   - `#orp-frame.orp-frame--visible` : iframe visibility states
+ *
+ * Visual identity matches v2.5.18 1:1 — the inline button is the same
+ * 42×42 grey square (calibrated to ZOneTheme's cart button), the
+ * "playing" state uses the same reggae-green accent, etc.
+ *
+ * The actual player UI styles live in player.css and are loaded by the
+ * iframe document (frame.tpl), not here.
+ *
+ * @author PixFeed - Marc Gueffie
+ */
+
+:root {
+    /* Inline button calibration — matches ZOneTheme cart button.
+       Override these in your theme's custom.css for non-ZOneTheme. */
+    --orp-btn-size: 42px;
+    --orp-btn-bg: #a3a2a2;
+    --orp-btn-bg-hover: #868686;
+    --orp-btn-radius: 6px;
+    --orp-playing-bg: #3f6e51;
+    --orp-playing-bg-hover: #335a42;
+}
+
+/* ------------------------------------------------------------------ *
+ * Iframe states                                                      *
+ * ------------------------------------------------------------------ */
+
+#orp-frame {
+    /* These rules also exist inline on the element, repeated here so
+       any cache strip of the inline `style=` attribute still leaves the
+       iframe correctly positioned. */
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    z-index: 9999;
+    transition: height 0.2s ease-out;
+    color-scheme: light dark;
+}
+
+#orp-frame.orp-frame--visible {
+    height: 80px;
+}
+
+body.orp-has-player {
+    padding-bottom: 80px;
+}
+
+/* iOS safe area: respect the home indicator on full-screen Safari */
+@supports (padding: env(safe-area-inset-bottom)) {
+    body.orp-has-player {
+        padding-bottom: calc(80px + env(safe-area-inset-bottom));
+    }
+    #orp-frame.orp-frame--visible {
+        height: calc(80px + env(safe-area-inset-bottom));
+    }
+}
+
+/* ------------------------------------------------------------------ *
+ * Inline play button (injected into product cards by bridge.js)      *
+ * Style imported verbatim from v2.5.18's player.css to preserve      *
+ * the visual identity 1:1.                                           *
+ * ------------------------------------------------------------------ */
+
+.orp-play-btn-inline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* align-self: center keeps the button vertically centered with the
+       cart button when the parent (e.g. ZOneTheme's `.buttons-sections`)
+       is a flex container — without it some responsive breakpoints align
+       items to flex-start and our button drifts above the cart icon. */
+    align-self: center;
+    width: var(--orp-btn-size);
+    height: var(--orp-btn-size);
+    padding: 0;
+    margin: 0 4px 0 0;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--orp-btn-radius);
+    background: var(--orp-btn-bg);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    box-sizing: border-box;
+    cursor: pointer;
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+    vertical-align: middle;
+    line-height: 1;
+}
+
+.orp-play-btn-inline::before {
+    content: '';
+    display: block;
+    width: 18px;
+    height: 18px;
+    background-color: currentColor;
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><polygon points='3,1 3,11 10,6'/></svg>") no-repeat center / contain;
+            mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><polygon points='3,1 3,11 10,6'/></svg>") no-repeat center / contain;
+}
+
+.orp-play-btn-inline:hover {
+    background: var(--orp-btn-bg-hover);
+    color: #fff;
+}
+
+.orp-play-btn-inline:focus-visible {
+    outline: 2px solid var(--orp-playing-bg);
+    outline-offset: 2px;
+}
+
+.orp-play-btn-inline:active {
+    transform: scale(0.95);
+}
+
+/* Playing state — reggae green, intentionally distinct from any
+   accent colour so "currently playing" is unambiguous. */
+.orp-play-btn-inline.orp-playing {
+    background: var(--orp-playing-bg);
+    color: #fff;
+}
+
+.orp-play-btn-inline.orp-playing:hover {
+    background: var(--orp-playing-bg-hover);
+}
+
+.orp-play-btn-inline.orp-playing::before {
+    width: 18px;
+    height: 18px;
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><rect x='1.5' y='1' width='3' height='10'/><rect x='7.5' y='1' width='3' height='10'/></svg>") no-repeat center / contain;
+            mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><rect x='1.5' y='1' width='3' height='10'/><rect x='7.5' y='1' width='3' height='10'/></svg>") no-repeat center / contain;
+}
+
+/* Optional: card with audio gets a positioning context so themes that
+   want to overlay other badges on the card don't conflict. */
+.orp-has-audio {
+    position: relative;
+}

@@ -1,0 +1,216 @@
+/**
+ * OnlyRoots Persistent Audio Player — integrated product playlist (ORP skin)
+ *
+ * Modern, OnlyRoots-aligned look. Reuses the same colour palette as the
+ * persistent footer player (--orp-bg, --orp-accent, etc.) so the two
+ * components feel like one product. Cohabits cleanly with ZOneTheme
+ * because every selector is scoped under .orp-product-playlist.
+ *
+ * @author PixFeed - Marc Gueffie
+ */
+
+.orp-product-playlist[data-skin="orp"] {
+    --orp-pp-bg: #fafafa;
+    --orp-pp-bg-alt: #f3f3f3;
+    --orp-pp-text: #1a1a1a;
+    --orp-pp-text-muted: #6b6b6b;
+    --orp-pp-accent: #e8a838;
+    --orp-pp-accent-hover: #f0b848;
+    --orp-pp-playing: #3f6e51;
+    --orp-pp-playing-hover: #335a42;
+    --orp-pp-border: rgba(0, 0, 0, 0.08);
+    --orp-pp-radius: 8px;
+
+    background: var(--orp-pp-bg);
+    border: 1px solid var(--orp-pp-border);
+    border-radius: var(--orp-pp-radius);
+    padding: 16px;
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--orp-pp-text);
+}
+
+.orp-product-playlist[data-skin="orp"] .orp-product-playlist__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--orp-pp-border);
+}
+
+.orp-product-playlist[data-skin="orp"] .orp-product-playlist__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--orp-pp-text);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.orp-product-playlist[data-skin="orp"] .orp-product-playlist__count {
+    color: var(--orp-pp-text-muted);
+    font-weight: 400;
+    margin-left: 4px;
+    font-size: 0.875rem;
+}
+
+.orp-product-playlist[data-skin="orp"] .orp-playlist-play-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--orp-pp-accent);
+    color: #1a1a1a;
+    border: none;
+    border-radius: var(--orp-pp-radius);
+    padding: 8px 16px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+.orp-product-playlist[data-skin="orp"] .orp-playlist-play-all:hover {
+    background: var(--orp-pp-accent-hover);
+}
+.orp-product-playlist[data-skin="orp"] .orp-playlist-play-all:active {
+    transform: scale(0.97);
+}
+
+.orp-product-playlist[data-skin="orp"] .orp-product-playlist__tracks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.orp-product-playlist[data-skin="orp"] .orp-product-playlist__track {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    transition: background-color 0.15s ease;
+}
+.orp-product-playlist[data-skin="orp"] .orp-product-playlist__track:hover {
+    background: var(--orp-pp-bg-alt);
+}
+.orp-product-playlist[data-skin="orp"] .orp-product-playlist__track + .orp-product-playlist__track {
+    margin-top: 2px;
+}
+
+.orp-product-playlist[data-skin="orp"] .orp-track-play {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    background: #1a1a1a;
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+.orp-product-playlist[data-skin="orp"] .orp-track-play:hover {
+    background: var(--orp-pp-accent);
+    color: #1a1a1a;
+}
+.orp-product-playlist[data-skin="orp"] .orp-track-play:active {
+    transform: scale(0.93);
+}
+.orp-product-playlist[data-skin="orp"] .orp-track-play__icon--pause {
+    display: none;
+}
+
+.orp-product-playlist[data-skin="orp"] .orp-product-playlist__track.is-playing .orp-track-play {
+    background: var(--orp-pp-playing);
+    color: #fff;
+}
+.orp-product-playlist[data-skin="orp"] .orp-product-playlist__track.is-playing .orp-track-play:hover {
+    background: var(--orp-pp-playing-hover);
+}
+.orp-product-playlist[data-skin="orp"] .orp-product-playlist__track.is-playing .orp-track-play__icon--play {
+    display: none;
+}
+.orp-product-playlist[data-skin="orp"] .orp-product-playlist__track.is-playing .orp-track-play__icon--pause {
+    display: inline-flex;
+}
+
+.orp-product-playlist[data-skin="orp"] .orp-track-position {
+    flex: 0 0 32px;
+    color: var(--orp-pp-text-muted);
+    font-family: 'SF Mono', Monaco, Consolas, monospace;
+    font-size: 0.8125rem;
+    text-align: right;
+    user-select: none;
+}
+
+.orp-product-playlist[data-skin="orp"] .orp-track-title {
+    flex: 1 1 auto;
+    color: var(--orp-pp-text);
+    font-size: 0.9375rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.orp-product-playlist[data-skin="orp"] .orp-product-playlist__track.is-playing .orp-track-title {
+    color: var(--orp-pp-playing);
+    font-weight: 600;
+}
+
+@media (max-width: 575.98px) {
+    .orp-product-playlist[data-skin="orp"] {
+        padding: 12px;
+    }
+    .orp-product-playlist[data-skin="orp"] .orp-product-playlist__track {
+        padding: 8px;
+        gap: 8px;
+    }
+    .orp-product-playlist[data-skin="orp"] .orp-track-position {
+        flex: 0 0 24px;
+        font-size: 0.75rem;
+    }
+    .orp-product-playlist[data-skin="orp"] .orp-track-title {
+        font-size: 0.875rem;
+    }
+}
+
+/* HHV-style "Listen" button injected at the start of the product short
+   description. Visible match to the persistent player's accent so the
+   customer recognises it as audio playback, not a generic button. */
+.product-description-short .orp-short-play-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #1a1a1a;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    margin: 0 0 10px 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+.product-description-short .orp-short-play-btn:hover {
+    background: #e8a838;
+    color: #1a1a1a;
+}
+.product-description-short .orp-short-play-btn:active {
+    transform: scale(0.97);
+}
+.product-description-short .orp-short-play-btn__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
