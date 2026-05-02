@@ -1,0 +1,437 @@
+/**
+ * OnlyRoots Persistent Audio Player — v2.5.2
+ *
+ * Theme-agnostic stylesheet. All selectors are scoped under .orp-* classes
+ * so this stylesheet never collides with the active theme.
+ *
+ * @author PixFeed - Marc Gueffie
+ */
+
+:root {
+    /* ============================================================ */
+    /*  THEME-CALIBRATED VARIABLES (default values target ZOneTheme) */
+    /* ------------------------------------------------------------ */
+    /*  These defaults are calibrated for OnlyRoots Reggae running   */
+    /*  on ZOneTheme: the inline play button must match the cart     */
+    /*  button visually (same size, same grey, same radius).         */
+    /*                                                               */
+    /*  For a different theme, override these in your theme's        */
+    /*  custom.css (or a child theme stylesheet) — every selector    */
+    /*  below uses CSS variables exclusively, so no module file edit */
+    /*  is needed.                                                   */
+    /* ============================================================ */
+
+    /* Footer player chrome (safe to retune per-theme) */
+    --orp-bg: #1a1a1a;
+    --orp-accent: #e8a838;
+    --orp-accent-hover: #f0b848;
+    --orp-text: #ffffff;
+    --orp-text-muted: rgba(255, 255, 255, 0.5);
+    --orp-bar-bg: rgba(255, 255, 255, 0.15);
+    --orp-bar-fill: #e8a838;
+    --orp-height: 72px;
+    --orp-z: 9000;
+
+    /* Inline "Listen" button — calibrated to match the ZOneTheme cart
+       button (grey #a3a2a2, 42×42, radius 6px). Override in your theme
+       for non-ZOneTheme deployments. */
+    --orp-btn-size: 42px;
+    --orp-btn-bg: #a3a2a2;
+    --orp-btn-bg-hover: #868686;
+    --orp-btn-radius: 6px;
+
+    /* "Now playing" state — reggae green, intentionally distinct from the
+       orange/gold --orp-accent so the playing state is unambiguous. */
+    --orp-playing-bg: #3f6e51;
+    --orp-playing-bg-hover: #335a42;
+}
+
+/* ============================================================ */
+/*  PERSISTENT FOOTER PLAYER                                    */
+/* ============================================================ */
+
+.orp-player {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: var(--orp-height);
+    background: var(--orp-bg);
+    border-top: 2px solid var(--orp-accent);
+    z-index: var(--orp-z);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    transform: translateY(100%);
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    box-sizing: border-box;
+}
+.orp-player[data-visible="true"] {
+    transform: translateY(0);
+}
+
+.orp-player-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 14px;
+    box-sizing: border-box;
+}
+
+/* Body offset so the player doesn't cover sticky page content */
+body.orp-player-active {
+    padding-bottom: var(--orp-height);
+}
+
+/* Cover artwork */
+.orp-cover {
+    width: 48px;
+    height: 48px;
+    border-radius: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: #2a2a2a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.orp-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.orp-cover-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Transport controls */
+.orp-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.orp-btn {
+    background: none;
+    border: none;
+    color: var(--orp-text);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.15s ease, background-color 0.15s ease;
+    opacity: 0.7;
+}
+.orp-btn:hover {
+    opacity: 1;
+}
+.orp-btn-play {
+    width: 40px;
+    height: 40px;
+    background: var(--orp-accent);
+    color: var(--orp-bg);
+    opacity: 1;
+}
+.orp-btn-play:hover {
+    background: var(--orp-accent-hover);
+}
+
+/* Track info + progress */
+.orp-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.orp-info-text {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    overflow: hidden;
+}
+.orp-track-name {
+    color: var(--orp-text);
+    font-weight: 600;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 40%;
+    text-decoration: none;
+}
+.orp-track-name:hover {
+    color: var(--orp-accent);
+    text-decoration: none;
+}
+.orp-track-meta {
+    color: var(--orp-text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+}
+.orp-track-sep {
+    margin: 0 6px;
+}
+
+.orp-progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.orp-progress-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--orp-bar-bg);
+    border-radius: 2px;
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+}
+.orp-progress-fill {
+    height: 100%;
+    background: var(--orp-bar-fill);
+    border-radius: 2px;
+    transition: width 0.1s linear;
+}
+.orp-progress-handle {
+    position: absolute;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    background: var(--orp-accent);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+.orp-progress-bar:hover .orp-progress-handle {
+    opacity: 1;
+}
+.orp-time {
+    color: var(--orp-text-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* Volume */
+.orp-volume-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.orp-volume-bar-wrap {
+    width: 80px;
+    display: flex;
+    align-items: center;
+}
+.orp-volume-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--orp-bar-bg);
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+}
+.orp-volume-fill {
+    height: 100%;
+    background: var(--orp-bar-fill);
+    border-radius: 2px;
+}
+
+/* Loading + navigating states */
+.orp-player.orp-loading .orp-btn-play {
+    opacity: 0.5;
+    pointer-events: none;
+}
+.orp-player.orp-navigating {
+    /* Visual cue during Swup transitions; harmless if Swup is off */
+    opacity: 0.92;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+    :root { --orp-height: 64px; }
+    .orp-player-inner {
+        padding: 0 10px;
+        gap: 8px;
+    }
+    .orp-cover {
+        width: 40px;
+        height: 40px;
+    }
+    .orp-volume-wrap {
+        display: none;
+    }
+    .orp-track-name {
+        max-width: 60%;
+        font-size: 13px;
+    }
+    .orp-track-meta {
+        font-size: 11px;
+    }
+}
+
+/* ============================================================ */
+/*  PLAY BUTTONS INJECTED IN PRODUCT LISTS                      */
+/* ============================================================ */
+
+/*
+ * Two presentations:
+ *   1. Inline: small square button next to "Add to cart", inserted into
+ *      whatever container the BO `buttonAnchor` setting points to.
+ *      Width/height match a typical 38–42px theme cart button.
+ *   2. Overlay (fallback): button placed on top of the product image
+ *      when no anchor element is found.
+ *
+ * Both forms use only .orp-* classes so we never inherit theme styles
+ * (the previous version inherited the cart button's ::before pseudo,
+ * producing a stray cart icon on the play button).
+ */
+
+/* Inline button: visually matches the ZOneTheme cart button (same 42×42
+   square, same grey, same radius, same subtle border + shadow). Sits flush
+   next to the "Add to cart" button. Customise via :root variables, not
+   here — see the variable block at the top of the file. */
+.orp-play-btn-inline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* align-self: center keeps the button vertically centered with the
+       cart button when the parent (e.g. ZOneTheme's `.buttons-sections`)
+       is a flex container — without it some responsive breakpoints align
+       items to flex-start and our button drifts above the cart icon. */
+    align-self: center;
+    width: var(--orp-btn-size);
+    height: var(--orp-btn-size);
+    padding: 0;
+    margin: 0 4px 0 0;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--orp-btn-radius);
+    background: var(--orp-btn-bg);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    box-sizing: border-box;
+    cursor: pointer;
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+    vertical-align: middle;
+    line-height: 1;
+}
+.orp-play-btn-inline::before {
+    content: '';
+    display: block;
+    width: 18px;
+    height: 18px;
+    background-color: currentColor;
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><polygon points='3,1 3,11 10,6'/></svg>") no-repeat center / contain;
+            mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><polygon points='3,1 3,11 10,6'/></svg>") no-repeat center / contain;
+}
+.orp-play-btn-inline:hover {
+    background: var(--orp-btn-bg-hover);
+    color: #fff;
+}
+.orp-play-btn-inline:active {
+    transform: scale(0.95);
+}
+/* Playing state — reggae green, NOT the orange/gold accent. The colour
+   shift makes "currently playing" unambiguous against the grey idle state. */
+.orp-play-btn-inline.orp-playing {
+    background: var(--orp-playing-bg);
+    color: #fff;
+}
+.orp-play-btn-inline.orp-playing:hover {
+    background: var(--orp-playing-bg-hover);
+}
+.orp-play-btn-inline.orp-playing::before {
+    width: 18px;
+    height: 18px;
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><rect x='1.5' y='1' width='3' height='10'/><rect x='7.5' y='1' width='3' height='10'/></svg>") no-repeat center / contain;
+            mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><rect x='1.5' y='1' width='3' height='10'/><rect x='7.5' y='1' width='3' height='10'/></svg>") no-repeat center / contain;
+}
+
+/* Overlay fallback button — placed on the product thumbnail */
+.orp-play-btn-mini {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(26, 26, 26, 0.85);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+}
+.orp-play-btn-mini:hover {
+    background: var(--orp-accent);
+    color: var(--orp-bg);
+    transform: scale(1.05);
+}
+.orp-play-btn-mini.orp-playing {
+    background: var(--orp-accent);
+    color: var(--orp-bg);
+}
+
+/* Ensure the overlay button can be positioned absolutely. We add this only
+   to elements explicitly marked by the JS, never blindly to theme classes,
+   so we never break thumbnail layouts. */
+.orp-has-audio {
+    position: relative;
+}
+
+/* "Open in player" button shown on the product page when the third-party
+   playlist module already renders its own player. */
+.orp-open-in-player {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    margin-top: 8px;
+    border: 1px solid var(--orp-bg);
+    border-radius: var(--orp-btn-radius);
+    background: transparent;
+    color: var(--orp-bg);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+.orp-open-in-player:hover {
+    background: var(--orp-bg);
+    color: #fff;
+}
+
+/* ============================================================ */
+/*  SWUP TRANSITION GUARD                                       */
+/* ============================================================ */
+
+/*
+ * When a Swup transition is in progress, hide the outgoing visual flicker
+ * caused by the old container being briefly empty before the new content
+ * is injected. Scoped to <html> classes Swup adds globally.
+ */
+html.is-leaving body,
+html.is-rendering body,
+html.is-animating body {
+    cursor: progress;
+}

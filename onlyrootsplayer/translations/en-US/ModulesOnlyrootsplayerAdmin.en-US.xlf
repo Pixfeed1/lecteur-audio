@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff xmlns="urn:oasis:names:tc:xliff:document:1.2" version="1.2">
+  <file source-language="fr-FR" target-language="en-US" datatype="plaintext" original="ModulesOnlyrootsplayerAdmin.fr-FR.xlf">
+    <header>
+      <tool tool-id="onlyrootsplayer" tool-name="OnlyRoots Persistent Audio Player"/>
+    </header>
+    <body>
+      <trans-unit id="1" resname="Accélère la navigation perçue en préchargeant les pages quand l'utilisateur survole un lien. Augmente légèrement la charge serveur.">
+        <source>Accélère la navigation perçue en préchargeant les pages quand l'utilisateur survole un lien. Augmente légèrement la charge serveur.</source>
+        <target>Speeds up perceived navigation by preloading pages when the user hovers a link. Slightly increases server load.</target>
+      </trans-unit>
+      <trans-unit id="2" resname="Active la collecte d'événements de diagnostic côté front (erreurs JS, hooks Swup, anomalies DOM avant/après chaque swap) et leur écriture dans var/monitor.log. Le log est plafonné à 1 Mo et rotaté automatiquement. À activer pour investigation en staging — laisser désactivé en production sauf besoin spécifique. Le contenu du log s'affiche dans la section « Diagnostic » au-dessus de ce formulaire.">
+        <source>Active la collecte d'événements de diagnostic côté front (erreurs JS, hooks Swup, anomalies DOM avant/après chaque swap) et leur écriture dans var/monitor.log. Le log est plafonné à 1 Mo et rotaté automatiquement. À activer pour investigation en staging — laisser désactivé en production sauf besoin spécifique. Le contenu du log s'affiche dans la section « Diagnostic » au-dessus de ce formulaire.</source>
+        <target>Enables collection of front-end diagnostic events (JS errors, Swup hooks, DOM anomalies before/after each swap) and writes them to var/monitor.log. The log is capped at 1 MB and rotates automatically. Enable for staging investigation — leave disabled in production unless specifically needed. Log contents appear in the "Diagnostic" section above this form.</target>
+      </trans-unit>
+      <trans-unit id="3" resname="Activer la navigation SPA (Swup)">
+        <source>Activer la navigation SPA (Swup)</source>
+        <target>Enable SPA navigation (Swup)</target>
+      </trans-unit>
+      <trans-unit id="4" resname="Activé">
+        <source>Activé</source>
+        <target>Enabled</target>
+      </trans-unit>
+      <trans-unit id="5" resname="Apparence du lecteur intégré">
+        <source>Apparence du lecteur intégré</source>
+        <target>Integrated player appearance</target>
+      </trans-unit>
+      <trans-unit id="6" resname="Au-delà de ce délai (en millisecondes), si un swap Swup a changé l'URL mais pas le contenu, le module force un rechargement complet. Le runtime ajuste cette valeur à la hausse (plafonnée à %max% ms) pour les boutiques lentes en fonction du premier swap réussi. Défaut : %default% ms.">
+        <source>Au-delà de ce délai (en millisecondes), si un swap Swup a changé l'URL mais pas le contenu, le module force un rechargement complet. Le runtime ajuste cette valeur à la hausse (plafonnée à %max% ms) pour les boutiques lentes en fonction du premier swap réussi. Défaut : %default% ms.</source>
+        <target>Beyond this delay (in milliseconds), if a Swup swap changed the URL but not the content, the module forces a full reload. The runtime adjusts this value upward (capped at %max% ms) for slow shops based on the first successful swap. Default: %default% ms.</target>
+      </trans-unit>
+      <trans-unit id="7" resname="Aucun (theme-agnostic)">
+        <source>Aucun (theme-agnostic)</source>
+        <target>None (theme-agnostic)</target>
+      </trans-unit>
+      <trans-unit id="8" resname="Ce module nécessite que le module « %s » soit installé et actif.">
+        <source>Ce module nécessite que le module « %s » soit installé et actif.</source>
+        <target>This module requires the "%s" module to be installed and active.</target>
+      </trans-unit>
+      <trans-unit id="9" resname="Choisissez le style visuel du lecteur intégré sur la fiche produit. Le mode « Classique » reproduit l'apparence de l'ancien lecteur Papp pour une transition invisible côté client.">
+        <source>Choisissez le style visuel du lecteur intégré sur la fiche produit. Le mode « Classique » reproduit l'apparence de l'ancien lecteur Papp pour une transition invisible côté client.</source>
+        <target>Choose the visual style of the integrated player on the product page. "Classic" mode reproduces the old Papp player look for a seamless client-side transition.</target>
+      </trans-unit>
+      <trans-unit id="10" resname="Classique (style ancien lecteur Papp)">
+        <source>Classique (style ancien lecteur Papp)</source>
+        <target>Classic (old Papp player style)</target>
+      </trans-unit>
+      <trans-unit id="11" resname="Code de réinitialisation thème exécuté après chaque swap Swup. « ZOneTheme » charge un script bundlé qui ré-attache les listeners du megamenu, sidebars, sticky header et scroll-to-top. « Aucun » laisse le module purement theme-agnostic. Si vous avez besoin d'ajouter du code custom en plus du preset, utilisez le champ « JS personnalisé » ci-dessous.">
+        <source>Code de réinitialisation thème exécuté après chaque swap Swup. « ZOneTheme » charge un script bundlé qui ré-attache les listeners du megamenu, sidebars, sticky header et scroll-to-top. « Aucun » laisse le module purement theme-agnostic. Si vous avez besoin d'ajouter du code custom en plus du preset, utilisez le champ « JS personnalisé » ci-dessous.</source>
+        <target>Theme reinit code run after every Swup swap. "ZOneTheme" loads a bundled script that re-attaches the megamenu, sidebars, sticky header and scroll-to-top listeners. "None" keeps the module purely theme-agnostic. If you need to add custom code on top of the preset, use the "Custom JS" field below.</target>
+      </trans-unit>
+      <trans-unit id="12" resname="Dans chaque fiche produit, où placer le bouton play inline (à côté du bouton panier). Plusieurs sélecteurs séparés par des virgules sont testés dans l'ordre ; le premier qui matche gagne pour chaque fiche. Si aucun ancrage n'est trouvé, le module retombe en fallback sur un bouton en overlay sur l'image produit. Défaut : %selectors%">
+        <source>Dans chaque fiche produit, où placer le bouton play inline (à côté du bouton panier). Plusieurs sélecteurs séparés par des virgules sont testés dans l'ordre ; le premier qui matche gagne pour chaque fiche. Si aucun ancrage n'est trouvé, le module retombe en fallback sur un bouton en overlay sur l'image produit. Défaut : %selectors%</source>
+        <target>In each product card, where to place the inline play button (next to the cart button). Multiple comma-separated selectors are tried in order; the first matching one wins per card. If no anchor is found, the module falls back to an overlay button on the product image. Default: %selectors%</target>
+      </trans-unit>
+      <trans-unit id="13" resname="Diagnostic — Moniteur d'événements">
+        <source>Diagnostic — Moniteur d'événements</source>
+        <target>Diagnostic — Event Monitor</target>
+      </trans-unit>
+      <trans-unit id="14" resname="Délai du watchdog de swap (ms)">
+        <source>Délai du watchdog de swap (ms)</source>
+        <target>Swap watchdog delay (ms)</target>
+      </trans-unit>
+      <trans-unit id="15" resname="Désactivé">
+        <source>Désactivé</source>
+        <target>Disabled</target>
+      </trans-unit>
+      <trans-unit id="16" resname="Désinstaller OnlyRoots Player et supprimer toute sa configuration ?">
+        <source>Désinstaller OnlyRoots Player et supprimer toute sa configuration ?</source>
+        <target>Uninstall OnlyRoots Player and remove all of its configuration?</target>
+      </trans-unit>
+      <trans-unit id="17" resname="Enregistrer">
+        <source>Enregistrer</source>
+        <target>Save</target>
+      </trans-unit>
+      <trans-unit id="18" resname="Impossible de vider le log (vérifier les permissions sur var/monitor.log).">
+        <source>Impossible de vider le log (vérifier les permissions sur var/monitor.log).</source>
+        <target>Could not clear the log (check permissions on var/monitor.log).</target>
+      </trans-unit>
+      <trans-unit id="19" resname="Inclure la page Contact dans la navigation Swup">
+        <source>Inclure la page Contact dans la navigation Swup</source>
+        <target>Include the Contact page in Swup navigation</target>
+      </trans-unit>
+      <trans-unit id="20" resname="JS additionnel exécuté APRÈS le preset thème ci-dessus. Utile pour des besoins spécifiques (tracking custom, modules tiers, etc.). Laisser vide si le preset suffit. S'exécute dans la portée globale.">
+        <source>JS additionnel exécuté APRÈS le preset thème ci-dessus. Utile pour des besoins spécifiques (tracking custom, modules tiers, etc.). Laisser vide si le preset suffit. S'exécute dans la portée globale.</source>
+        <target>Additional JS executed AFTER the theme preset above. Useful for specific needs (custom tracking, third-party modules, etc.). Leave empty if the preset is enough. Runs in the global scope.</target>
+      </trans-unit>
+      <trans-unit id="21" resname="JS personnalisé après swap Swup">
+        <source>JS personnalisé après swap Swup</source>
+        <target>Custom JS after Swup swap</target>
+      </trans-unit>
+      <trans-unit id="22" resname="Le module source audio « %s » n'est pas installé ou sa table de base de données est manquante. Le lecteur ne s'affichera nulle part tant que ce module ne sera pas actif.">
+        <source>Le module source audio « %s » n'est pas installé ou sa table de base de données est manquante. Le lecteur ne s'affichera nulle part tant que ce module ne sera pas actif.</source>
+        <target>The audio source module "%s" is not installed or its database table is missing. The player will not display anywhere until that module is active.</target>
+      </trans-unit>
+      <trans-unit id="23" resname="Lecteur audio persistant cross-pages avec navigation SPA optionnelle. Compatible avec n'importe quel thème PrestaShop 8 via sélecteurs configurables.">
+        <source>Lecteur audio persistant cross-pages avec navigation SPA optionnelle. Compatible avec n'importe quel thème PrestaShop 8 via sélecteurs configurables.</source>
+        <target>Persistent cross-page audio player with optional SPA navigation. Compatible with any PrestaShop 8 theme via configurable selectors.</target>
+      </trans-unit>
+      <trans-unit id="24" resname="Les événements collectés par le moniteur (erreurs JS, hooks Swup, diffs DOM) sont écrits dans var/monitor.log et affichés ci-dessous (du plus ancien au plus récent). Activez le moniteur dans le formulaire de configuration ci-dessous pour démarrer la collecte.">
+        <source>Les événements collectés par le moniteur (erreurs JS, hooks Swup, diffs DOM) sont écrits dans var/monitor.log et affichés ci-dessous (du plus ancien au plus récent). Activez le moniteur dans le formulaire de configuration ci-dessous pour démarrer la collecte.</source>
+        <target>Events collected by the monitor (JS errors, Swup hooks, DOM diffs) are written to var/monitor.log and displayed below (oldest to newest). Enable the monitor in the configuration form below to start collection.</target>
+      </trans-unit>
+      <trans-unit id="25" resname="Log de diagnostic vidé.">
+        <source>Log de diagnostic vidé.</source>
+        <target>Diagnostic log cleared.</target>
+      </trans-unit>
+      <trans-unit id="26" resname="Logge les événements détaillés dans la console du navigateur (aucun log côté serveur). À désactiver en production.">
+        <source>Logge les événements détaillés dans la console du navigateur (aucun log côté serveur). À désactiver en production.</source>
+        <target>Logs detailed events to the browser console (no server-side log). Disable in production.</target>
+      </trans-unit>
+      <trans-unit id="27" resname="Mode debug">
+        <source>Mode debug</source>
+        <target>Debug mode</target>
+      </trans-unit>
+      <trans-unit id="28" resname="Moderne (style OnlyRoots)">
+        <source>Moderne (style OnlyRoots)</source>
+        <target>Modern (OnlyRoots style)</target>
+      </trans-unit>
+      <trans-unit id="29" resname="Moniteur diagnostique">
+        <source>Moniteur diagnostique</source>
+        <target>Diagnostic monitor</target>
+      </trans-unit>
+      <trans-unit id="30" resname="Motifs d'exclusion d'URL supplémentaires">
+        <source>Motifs d'exclusion d'URL supplémentaires</source>
+        <target>Additional URL exclusion patterns</target>
+      </trans-unit>
+      <trans-unit id="31" resname="OPT-IN — par défaut désactivé. Quand activé, la page Contact est navigable via Swup et l'audio continue à jouer pendant la transition (au lieu d'un rechargement complet qui interrompt la lecture). Le layout du thème ZOneTheme est compatible (mêmes conteneurs #content-wrapper / #content que les autres pages), mais un module tiers monté sur la page Contact (formulaire, captcha, chat) peut casser le swap. Le watchdog et le détecteur de catastrophic swap restent actifs : si un échec est détecté, la page est rechargée intégralement automatiquement. À activer prudemment et à tester en staging.">
+        <source>OPT-IN — par défaut désactivé. Quand activé, la page Contact est navigable via Swup et l'audio continue à jouer pendant la transition (au lieu d'un rechargement complet qui interrompt la lecture). Le layout du thème ZOneTheme est compatible (mêmes conteneurs #content-wrapper / #content que les autres pages), mais un module tiers monté sur la page Contact (formulaire, captcha, chat) peut casser le swap. Le watchdog et le détecteur de catastrophic swap restent actifs : si un échec est détecté, la page est rechargée intégralement automatiquement. À activer prudemment et à tester en staging.</source>
+        <target>OPT-IN — disabled by default. When enabled, the Contact page is navigable via Swup and audio keeps playing through the transition (instead of a full reload that interrupts playback). The ZOneTheme layout is compatible (same #content-wrapper / #content containers as other pages), but a third-party module mounted on the Contact page (form, captcha, chat) can break the swap. The watchdog and catastrophic-swap detector stay active: if a failure is detected, the page is fully reloaded automatically. Enable cautiously and test in staging.</target>
+      </trans-unit>
+      <trans-unit id="32" resname="OnlyRoots Player — Configuration">
+        <source>OnlyRoots Player — Configuration</source>
+        <target>OnlyRoots Player — Configuration</target>
+      </trans-unit>
+      <trans-unit id="33" resname="OnlyRoots — Lecteur audio persistant">
+        <source>OnlyRoots — Lecteur audio persistant</source>
+        <target>OnlyRoots — Persistent audio player</target>
+      </trans-unit>
+      <trans-unit id="34" resname="Paramètres enregistrés.">
+        <source>Paramètres enregistrés.</source>
+        <target>Settings saved.</target>
+      </trans-unit>
+      <trans-unit id="35" resname="Preset de réinit thème">
+        <source>Preset de réinit thème</source>
+        <target>Theme reinit preset</target>
+      </trans-unit>
+      <trans-unit id="36" resname="Précharger les liens au survol (Swup)">
+        <source>Précharger les liens au survol (Swup)</source>
+        <target>Preload links on hover (Swup)</target>
+      </trans-unit>
+      <trans-unit id="37" resname="Quand activé, le lecteur du module « productaudioplaylistplugin » est désenregistré du hook displayProductPlaylistPlugin et remplacé par notre lecteur intégré (liste de pistes + bouton play par piste, qui transfèrent la lecture dans le lecteur persistant en bas de page). Désactivable à tout moment : Papp est ré-enregistré à sa position d'origine.">
+        <source>Quand activé, le lecteur du module « productaudioplaylistplugin » est désenregistré du hook displayProductPlaylistPlugin et remplacé par notre lecteur intégré (liste de pistes + bouton play par piste, qui transfèrent la lecture dans le lecteur persistant en bas de page). Désactivable à tout moment : Papp est ré-enregistré à sa position d'origine.</source>
+        <target>When enabled, the "productaudioplaylistplugin" module's player is unregistered from the displayProductPlaylistPlugin hook and replaced by our integrated player (track list + per-track play button that transfer playback to the persistent player at the bottom of the page). Can be disabled at any time: Papp is re-registered at its original position.</target>
+      </trans-unit>
+      <trans-unit id="38" resname="Quand activé, les transitions entre pages se font via fetch + remplacement DOM, en gardant l'audio en lecture pendant les navigations. Si votre thème est incompatible, désactivez cette option — le lecteur continue de fonctionner en mode autonome via localStorage.">
+        <source>Quand activé, les transitions entre pages se font via fetch + remplacement DOM, en gardant l'audio en lecture pendant les navigations. Si votre thème est incompatible, désactivez cette option — le lecteur continue de fonctionner en mode autonome via localStorage.</source>
+        <target>When enabled, page transitions happen via fetch + DOM replacement, keeping the audio playing across navigations. If your theme is incompatible, disable this option — the player still works in standalone mode via localStorage.</target>
+      </trans-unit>
+      <trans-unit id="39" resname="Remplacer le lecteur Papp sur la fiche produit">
+        <source>Remplacer le lecteur Papp sur la fiche produit</source>
+        <target>Replace the Papp player on the product page</target>
+      </trans-unit>
+      <trans-unit id="40" resname="Si rempli, Swup n'est activé que pour ces IPs (CIDR IPv4 supporté, séparées par virgules ou retours à la ligne). Utile pour tester la navigation SPA en production pour le staff uniquement. Laissez vide pour activer Swup pour tout le monde.">
+        <source>Si rempli, Swup n'est activé que pour ces IPs (CIDR IPv4 supporté, séparées par virgules ou retours à la ligne). Utile pour tester la navigation SPA en production pour le staff uniquement. Laissez vide pour activer Swup pour tout le monde.</source>
+        <target>If filled, Swup is only enabled for these IPs (IPv4 CIDR supported, comma- or newline-separated). Useful for testing SPA navigation in production for staff only. Leave empty to enable Swup for everyone.</target>
+      </trans-unit>
+      <trans-unit id="41" resname="Sélecteur(s) CSS de la zone de contenu principale à remplacer pendant la navigation. Plusieurs sélecteurs séparés par des virgules servent de fallback (le premier qui matche ET qui contient une fiche produit gagne). Défaut : %selectors%">
+        <source>Sélecteur(s) CSS de la zone de contenu principale à remplacer pendant la navigation. Plusieurs sélecteurs séparés par des virgules servent de fallback (le premier qui matche ET qui contient une fiche produit gagne). Défaut : %selectors%</source>
+        <target>CSS selector(s) for the main content area to replace during navigation. Multiple comma-separated selectors serve as fallbacks (the first one that matches AND contains a product card wins). Default: %selectors%</target>
+      </trans-unit>
+      <trans-unit id="42" resname="Sélecteur(s) CSS utilisés pour trouver les fiches produit sur les listings, où sont injectés les boutons play. L'élément doit porter un attribut [data-id-product]. Défaut : %selectors%">
+        <source>Sélecteur(s) CSS utilisés pour trouver les fiches produit sur les listings, où sont injectés les boutons play. L'élément doit porter un attribut [data-id-product]. Défaut : %selectors%</source>
+        <target>CSS selector(s) used to find product cards on listings, where the play buttons are injected. The element must carry a [data-id-product] attribute. Default: %selectors%</target>
+      </trans-unit>
+      <trans-unit id="43" resname="Sélecteur(s) d'ancrage du bouton play">
+        <source>Sélecteur(s) d'ancrage du bouton play</source>
+        <target>Play button anchor selector(s)</target>
+      </trans-unit>
+      <trans-unit id="44" resname="Sélecteur(s) des fiches produit">
+        <source>Sélecteur(s) des fiches produit</source>
+        <target>Product card selector(s)</target>
+      </trans-unit>
+      <trans-unit id="45" resname="Sélecteur(s) du conteneur Swup">
+        <source>Sélecteur(s) du conteneur Swup</source>
+        <target>Swup container selector(s)</target>
+      </trans-unit>
+      <trans-unit id="46" resname="Taille actuelle : %s Ko (plafond : 1024 Ko avant rotation).">
+        <source>Taille actuelle : %s Ko (plafond : 1024 Ko avant rotation).</source>
+        <target>Current size: %s KB (cap: 1024 KB before rotation).</target>
+      </trans-unit>
+      <trans-unit id="47" resname="Tous les sélecteurs dépendants du thème sont configurables ci-dessous. Utilisez d'abord les valeurs par défaut ; ne les modifiez que si votre thème utilise un balisage DOM différent.">
+        <source>Tous les sélecteurs dépendants du thème sont configurables ci-dessous. Utilisez d'abord les valeurs par défaut ; ne les modifiez que si votre thème utilise un balisage DOM différent.</source>
+        <target>All theme-dependent selectors are configurable below. Use the defaults first, and only adjust them if your theme uses different DOM markup.</target>
+      </trans-unit>
+      <trans-unit id="48" resname="Télécharger le log">
+        <source>Télécharger le log</source>
+        <target>Download the log</target>
+      </trans-unit>
+      <trans-unit id="49" resname="Un motif par ligne. Les URLs contenant l'un de ces motifs court-circuitent Swup et déclenchent un rechargement complet de la page. Les pages PrestaShop standard (panier, commande, connexion, mon compte, etc.) sont déjà exclues automatiquement — listez ici uniquement les chemins additionnels.">
+        <source>Un motif par ligne. Les URLs contenant l'un de ces motifs court-circuitent Swup et déclenchent un rechargement complet de la page. Les pages PrestaShop standard (panier, commande, connexion, mon compte, etc.) sont déjà exclues automatiquement — listez ici uniquement les chemins additionnels.</source>
+        <target>One pattern per line. URLs containing any of these patterns bypass Swup and trigger a full page reload. Standard PrestaShop pages (cart, order, login, my account, etc.) are already excluded automatically — list only additional paths here.</target>
+      </trans-unit>
+      <trans-unit id="50" resname="Vider le log">
+        <source>Vider le log</source>
+        <target>Clear the log</target>
+      </trans-unit>
+      <trans-unit id="51" resname="Vider le log de diagnostic ?">
+        <source>Vider le log de diagnostic ?</source>
+        <target>Clear the diagnostic log?</target>
+      </trans-unit>
+      <trans-unit id="52" resname="Whitelist d'IPs (mode preview)">
+        <source>Whitelist d'IPs (mode preview)</source>
+        <target>IP whitelist (preview mode)</target>
+      </trans-unit>
+      <trans-unit id="53" resname="ZOneTheme (OnlyRoots Reggae)">
+        <source>ZOneTheme (OnlyRoots Reggae)</source>
+        <target>ZOneTheme (OnlyRoots Reggae)</target>
+      </trans-unit>
+      <trans-unit id="54" resname="— log vide —">
+        <source>— log vide —</source>
+        <target>— empty log —</target>
+      </trans-unit>
+    </body>
+  </file>
+</xliff>
