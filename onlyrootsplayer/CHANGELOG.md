@@ -3,6 +3,31 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.21] — 2026-05-02
+
+### Added — `Brevo.push(` to IGNORE_SCRIPT_PATTERNS
+
+After analyzing the `sendinblue` (Brevo) module source, found that
+its `hookDisplayHeader` injects:
+
+```html
+<script src="https://cdn.brevo.com/js/sdk-loader.js" async></script>
+<script>
+    window.Brevo = window.Brevo || [];
+    Brevo.push(["init", {client_key: "...", email_id: "..."}]);
+</script>
+```
+
+The inline `Brevo.push(["init", ...])` was being re-executed by
+SwupScriptsPlugin on every swap, queueing duplicate init events for
+the Brevo SDK. After N navs: N duplicate init events → polluted
+analytics tracking and possible runtime issues in the SDK.
+
+Extended `IGNORE_SCRIPT_PATTERNS` regex with `Brevo\.push\(` so the
+init script is marked `data-swup-ignore-script` and skipped.
+
+Minor patch, not user-facing.
+
 ## [2.5.20] — 2026-05-02
 
 Two corrections following the v2.5.19 production test:

@@ -1547,7 +1547,13 @@
         //             by a parallel review session reading ZOneTheme
         //             source line-by-line (drop-down.js,
         //             _aonemegamenu.js).
-        var IGNORE_SCRIPT_PATTERNS = /var\s+prestashop\s*=|prestashop\.(on|emit)\(|\$\(\s*[^)]+\s*\)\.on\(|addEventListener\(/;
+        //   v2.5.21 — added `Brevo.push(` (Sendinblue / Brevo SDK queue).
+        //             The Brevo tracking_script.tpl injected by hookDisplay-
+        //             Header on every page contains an inline `Brevo.push(
+        //             ["init", {...}])`. Without ignoring it, ScriptsPlugin
+        //             re-executes the init on every Swup swap → duplicate
+        //             init events queued, polluted analytics.
+        var IGNORE_SCRIPT_PATTERNS = /var\s+prestashop\s*=|prestashop\.(on|emit)\(|\$\(\s*[^)]+\s*\)\.on\(|addEventListener\(|Brevo\.push\(/;
 
         swupInstance.hooks.before('content:replace', function (visit) {
             try {
