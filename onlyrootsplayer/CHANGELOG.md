@@ -1,5 +1,118 @@
 # Changelog
 
+## 3.0.11 — 2026-05-02
+
+### Back-port of v2.5.10–v2.5.15 Swup hardening into the v3 base
+
+The v3.0.10 architectural rewrite introduced the iframe player
+(audio survives every navigation regardless of DOM mutations) but
+the rewritten `swup-init.js` dropped every Swup hardening that the
+v2.5.x patch chain had accumulated. The iframe protects audio, but
+the parent page's Swup layer still goes through the same
+DOM-mutation rounds as before — and operators reported the same
+dropdown / language / megamenu glitches that v2.5.10–v2.5.15 had
+fixed.
+
+Re-applied the missing fixes inside `views/js/swup-init.js`. The
+iframe architecture stays untouched.
+
+### Fixed — listener stacking via `SwupScriptsPlugin` (was 2.5.10/2.5.11)
+
+ScriptsPlugin re-runs every inline `<script>` after each swap.
+PrestaShop core, ZOneTheme, and most modules embed inline scripts
+that bind delegated listeners (`$(document).on(...)`,
+`document.addEventListener(...)`, `prestashop.on(...)`,
+`$('.js-dropdown').on('show.bs.dropdown', ...)`,
+`$(window).on('load', ...)`, etc.). Each re-run stacks a new
+handler without removing the previous one. After a few nav hops:
+multiple handlers per click → "dropdown opens then closes",
+"add-to-cart counts twice", "language flag unresponsive".
+
+Re-applied the v2.5.11 regex that flags listener-binding inline
+scripts with `data-swup-ignore-script` before each swap so
+ScriptsPlugin skips them:
+
+```
+/var\s+prestashop\s*=|prestashop\.(on|emit)\(|
+ \$\(\s*[^)]+\s*\)\.on\(|addEventListener\(/
+```
+
+Operator escape hatch unchanged: `data-swup-reload-script` on a
+`<script>` tag forces re-execution.
+
+### Fixed — language switcher blocked by Swup (was 2.5.7+)
+
+ZOneTheme's `ps_languageselector` template renders language items
+as `<a data-iso-code="en" href="...">`. Without exclusion, Swup's
+linkSelector intercepts the click and tries to swap to the new
+language URL — leaves either an empty container or a wrong-language
+mash-up.
+
+Re-applied:
+- `linkSelector: 'a[href]:not([data-iso-code])...'` — Swup now
+  ignores language anchors natively.
+- `tagLanguageLinks()` runs at boot AND after every
+  `content:replace`, flagging any anchor matching `[data-iso-code]`
+  or `[href*="id_lang="]` with `data-no-swup` for belt-and-braces.
+- `ignoreVisit()` returns `true` for any URL with an `id_lang`
+  query param OR a different 2-letter language prefix in the path.
+
+### Fixed — `prestashop` event emitter clobbered (was 2.0.0+)
+
+PS pages serialize the `prestashop` config object into an inline
+`<script>var prestashop = {...};</script>`. After init,
+`window.prestashop` is a live EventEmitter with active listeners
+from every PS module on the page. Re-running the data block from a
+swapped HTML would replace the live emitter with a fresh data-only
+object, killing every listener.
+
+Re-applied `mergePrestashopData(html)`: parses the new HTML's
+`var prestashop = {...}` block and merges only the pure-data keys
+(`cart`, `customer`, `page`, `urls`, `breadcrumb`, `language`,
+`currency`, `country`, `shop`, `field_required`, `static_token`,
+`token`, `time`) into the live emitter without touching its
+listeners.
+
+### Fixed — Bootstrap dropdown unreachable on ZOneTheme (was 2.5.13)
+
+ZOneTheme bundles Bootstrap 5 inside webpack `theme.js` and never
+exposes `window.bootstrap` globally (verified in production console:
+`typeof window.bootstrap === 'undefined'`). Any
+`bootstrap.Dropdown.getInstance(...)` call returns `null`. After a
+Swup swap, the `.show` class state is stale and Bootstrap's own
+delegated handler may have lost its reference.
+
+Re-applied the v2.5.13 strategy: a single click delegate on
+`document` that drives `.show` / `aria-expanded` ourselves, using
+the same class names Bootstrap would set (so the theme CSS still
+works). Plus an Escape keydown listener and an outside-click
+closer. Bound exactly once per session via
+`window.__orpDropdownDelegateBound`. Resets visual state on every
+swap to clear "phantom open" toggles.
+
+### Fixed — Contact page slug coverage
+
+The v3.0.10 `excluded` array hard-coded `/contactez-nous` and
+`/contact-us` only. Shops with a different localized slug
+(`/nous-contacter`, `/contact`) bypassed the exclusion → Swup
+attempted the swap → catastrophic-swap bug returned. Added the two
+missing slug forms.
+
+### What's NOT changed in 3.0.11
+
+The iframe architecture from v3.0.10 stays as-is: same
+`controllers/front/frame.php`, same `frame-injector.tpl`, same
+`bridge.js`, same `frame.tpl`. Audio still lives inside the iframe.
+The fixes above only apply to the parent-side Swup layer that
+governs the rest of the page.
+
+### Migration note
+
+In-place upgrade from 3.0.10. After installing 3.0.11:
+1. Vide cache PrestaShop (BO → Avancé → Performances → Vider le cache)
+2. Hard refresh front (Ctrl+Shift+R) to evict cached `swup-init.js`
+3. Aucune action BO requise — la config existante est compatible
+
 ## 3.0.0 — 2026-05-02
 
 ### Full architectural rewrite
