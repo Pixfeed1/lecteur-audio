@@ -1433,6 +1433,28 @@
                     if (shouldExcludeFromSwup(url)) return true;
                     return false;
                 },
+                // Request headers override (added v2.5.22).
+                //
+                // Swup's default `requestHeaders` includes
+                // `'X-Requested-With': 'swup'`. PrestaShop core's
+                // `Tools::isAjaxRequest()` and several modules check
+                // for the mere PRESENCE of `X-Requested-With` (not
+                // its value) to decide whether to render a stripped-
+                // down "AJAX" response — which results in a degraded
+                // home page (header + footer only, empty
+                // `#content-wrapper`). Operator confirmed that
+                // navigating directly to the same URL returns a
+                // full page; only the Swup fetch returns the
+                // degraded version.
+                //
+                // Setting `Accept` to a browser-typical value AND
+                // dropping the `X-Requested-With` indicator makes
+                // the fetch indistinguishable from a normal browser
+                // navigation, so PS serves the full page.
+                requestHeaders: {
+                    'X-Requested-With': '',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                },
             });
         } catch (err) {
             dlog('Swup init failed, falling back to localStorage', err);

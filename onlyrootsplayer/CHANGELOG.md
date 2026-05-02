@@ -3,6 +3,41 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.22] — 2026-05-02
+
+### Fixed — degraded home returned by Swup-fetched requests
+
+**Confirmed root cause via operator A/B test:** opening the home URL
+directly in a new browser tab returns the FULL page (header + footer
++ all home blocks + 320+ images). The same URL fetched via Swup
+returns a degraded version (header + footer + empty `#content-wrapper`).
+Both requests hit the same server, the same PrestaShop instance,
+the same Smarty cache state — clearing/disabling the Smarty cache
+didn't change the bug, ruling out cache pollution.
+
+The only difference between the two requests: **request headers**.
+Swup's default `requestHeaders` includes `'X-Requested-With': 'swup'`.
+PrestaShop core (`Tools::isAjaxRequest()`) and several modules check
+the presence (or value) of this header to decide whether to render a
+"stripped down AJAX response" — which results in the degraded HTML.
+
+### Fix
+
+Override the Swup constructor's `requestHeaders` option to:
+- Send `'X-Requested-With': ''` (empty string instead of `'swup'`)
+- Send `'Accept': 'text/html,application/xhtml+xml,...'` (browser-typical)
+
+This makes the fetch indistinguishable from a normal browser
+navigation. The server returns the full page rendering, Swup swaps
+in the full content, the home displays correctly.
+
+### Trade-off
+
+If a third-party module relies on Swup's signature header to e.g.
+log analytics events differently for SPA navigation, that behaviour
+is now lost. We accept that — losing analytics differentiation is
+worth fixing the user-facing degraded home bug.
+
 ## [2.5.21] — 2026-05-02
 
 ### Added — `Brevo.push(` to IGNORE_SCRIPT_PATTERNS
