@@ -3,6 +3,104 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.19] — 2026-05-02
+
+Three targeted patches stacked into one release. Audio continuity on
+the Contact page is the headline feature.
+
+### Patch 1 — Audio continuous on Contact page (`ORP_INCLUDE_CONTACT` default ON)
+
+The original v2.4.5 catastrophic-swap on `/fr/nous-contacter` was
+caused by listener-stacking from third-party inline scripts on the
+Contact page (contactform native validators, Brevo Chat boot,
+captcha widgets) that wiped the `swup-enabled` class on `<html>` after
+a few navigations. We worked around it in v2.4.6 by adding `'contact'`
+to the Swup exclusion list — i.e. Contact navigation triggered a full
+reload, audio stopped.
+
+Since v2.5.10/2.5.11 the `IGNORE_SCRIPT_PATTERNS` regex marks every
+listener-binding inline script with `data-swup-ignore-script` so
+ScriptsPlugin skips it on every swap. The root cause of the
+catastrophic-swap is therefore neutralised on the parent page.
+
+We're now flipping the operator opt-in: `CFG_INCLUDE_CONTACT` defaults
+to `1` instead of `0`. Contact participates in Swup nav and audio
+keeps playing across the transition.
+
+**Safety net unchanged.** If the catastrophic-swap re-occurs on a
+specific install (third-party module we haven't seen), the watchdog
+detects the URL/content mismatch within 1.5s, forces a full reload,
+and we end up in the previous state (audio stops on Contact). Worst
+case = identical to v2.5.18 behaviour.
+
+Operators who actively prefer the previous behaviour can flip the
+toggle back to off in the BO config form.
+
+### Patch 2 — `data-swup-persist` on the player wrapper
+
+Defence-in-depth. `<div id="orp-player">` now carries `data-swup-persist="orp-player"`
+(Swup's native opt-out attribute). The player already survives Swup
+swaps because it lives outside `#content-wrapper`, but this attribute
+makes the immunity explicit and survives:
+
+- Future ZOneTheme structure changes that might accidentally place the
+  player inside the swap container
+- Operator changes to `ORP_SWUP_CONTAINER` that broaden the swap area
+- Third-party module DOM mutations that move the wrapper
+
+Zero risk, purely additive.
+
+### Patch 3 — Defensive wrapper for `as4Plugin.getParamValue`
+
+Production monitor log on 2026-05-02 14:58:04 captured:
+
+```
+js:error message=Uncaught TypeError: Cannot read properties of
+undefined (reading 'as4_productFilterListData')
+filename=/themes/ZOneTheme/assets/cache/bottom-083c78459.js lineno=950
+```
+
+Source identified in `pm_advancedsearch4/views/js/as4_plugin.js`:
+`as4Plugin.getParamValue(idSearch, 'as4_productFilterListData')` is
+called from 8 sites (lines 98, 120, 565, 602, 681, 764, plus the
+`-17.js` variant). The function accesses
+`as4Plugin.params[idSearch]['as4_productFilterListData']`. If
+`as4Plugin.params[idSearch]` is `undefined` (which happens during the
+50–300ms race window between Swup `content:replace` and our
+`rehydrateAs4Params()` async fetch), the property access throws.
+
+The PHP source (`pm_advancedsearch.tpl` line 79) renders the inline
+init via `<script>as4Plugin.params[N] = {...};</script>`. This block
+sits in the body, but `swup-head-plugin` doesn't re-evaluate body
+scripts and our `IGNORE_SCRIPT_PATTERNS` filter catches it for
+listener-stacking reasons. So during the race window after a swap,
+`params[idSearch]` is whatever the previous page left there — or
+empty if it's a first visit.
+
+**Fix.** Wrap `as4Plugin.getParamValue` with a defensive guard that
+returns `''` when `params[idSearch]` is missing instead of throwing.
+Returning `''` is safe: the PHP template already outputs the literal
+string `''` when `$as4_productFilterListData` is empty, so existing
+callers in `as4_plugin.js` already handle that case in their
+JSON.parse logic without crashing.
+
+The wrapper is idempotent (`__orpPatched` flag on the wrapped
+function) and is applied:
+- BEFORE `rehydrateAs4Params()` starts (closes the race window)
+- AGAIN after rehydration completes (defensive, in case
+  pm_advancedsearch4 redefined the function during its inline script
+  re-eval)
+
+Both calls are inside `rebindAdvancedSearch4()`, which runs once per
+swap from the preset entry point.
+
+### Credits
+
+Diagnosis of patch 3 root cause provided by a parallel review session
+that grep'd the live `pm_advancedsearch4` module source (8 call sites
+for `getParamValue`, the Smarty template at line 79, the timing of the
+inline script vs Swup's swap pipeline).
+
 ## [2.5.18] — 2026-05-01
 
 Hotfix for v2.5.17: stale `updateProductList` events no longer wipe

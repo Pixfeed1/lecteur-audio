@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.5.18
+ * @version   2.5.19
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -83,7 +83,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.5.18';
+        $this->version          = '2.5.19';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -145,11 +145,22 @@ class OnlyRootsPlayer extends Module
             // F12 console open to capture any reinit-related errors.
             self::CFG_THEME_PRESET      => self::THEME_PRESET_NONE,
             self::CFG_MONITOR_ENABLED   => 0,
-            // Contact stays excluded from Swup by default. Operator opts in
-            // via BO if they want to test continuous-audio navigation
-            // through the contact page (catastrophic-swap watchdog +
-            // monitor remain in place as a safety net).
-            self::CFG_INCLUDE_CONTACT   => 0,
+            // Contact is now INCLUDED in Swup nav by default (changed in
+            // v2.5.19). The original v2.4.5 catastrophic-swap on Contact
+            // was caused by listener-stacking from contactform / Brevo
+            // Chat / captcha inline scripts wiping the `swup-enabled`
+            // class on `<html>`. The v2.5.10/2.5.11 IGNORE_SCRIPT_PATTERNS
+            // regex now skips those scripts on every swap, so the root
+            // cause is neutralised. Audio can finally continue across
+            // Contact navigation.
+            //
+            // If the catastrophic swap somehow re-occurs on a different
+            // setup, the watchdog (still armed) catches it and forces a
+            // full reload — same behaviour as before this change. So the
+            // worst case is identical to the previous default; the best
+            // case is "audio continuous on Contact" which is what the
+            // operator has been asking for since v2.4.5.
+            self::CFG_INCLUDE_CONTACT   => 1,
             // Off by default on upgrades — the operator opts in via BO so
             // we never silently swap out Papp's player on existing installs.
             self::CFG_REPLACE_PAPP_PLAYER => 0,

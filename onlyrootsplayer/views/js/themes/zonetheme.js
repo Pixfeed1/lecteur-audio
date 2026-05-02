@@ -233,6 +233,67 @@
     }
 
     /**
+     * Defensively wrap `as4Plugin.getParamValue` so it returns an empty
+     * string instead of throwing when `as4Plugin.params[idSearch]` is
+     * missing. This closes the race window where the user clicks an AS4
+     * facet AFTER a Swup swap but BEFORE `rehydrateAs4Params()` has
+     * re-fetched the inline params script (typically 50–300ms).
+     *
+     * Without this wrapper, `as4Plugin.getParamValue(idSearch, key)`
+     * accesses `as4Plugin.params[idSearch][key]` and crashes with
+     * "Cannot read properties of undefined (reading
+     * 'as4_productFilterListData')" — the exact error captured in the
+     * production monitor log on 2026-05-02 14:58:04.
+     *
+     * Source of the original function: `pm_advancedsearch4/views/js/
+     * as4_plugin.js` (called from 8 sites: lines 98, 120, 565, 602,
+     * 681, 764 plus the `-17.js` variant). It accesses
+     * `as4Plugin.params[idSearch]['as4_productFilterListData']` (and
+     * other keys: `as4_productFilterListSource`, `scrollTopActive`,
+     * `resetURL`).
+     *
+     * Returning '' is safe because the PHP template
+     * (`pm_advancedsearch.tpl` line 79) literally outputs the string
+     * `''` when `$as4_productFilterListData` is empty, so callers
+     * already handle that empty-string case in their JSON.parse logic.
+     *
+     * Idempotent: the `__orpPatched` flag on the wrapped function
+     * prevents double-wrapping if the function is called more than
+     * once per swap (which it is — preset runs cleanup + reinit
+     * passes that may both invoke this).
+     *
+     * @return {boolean} true if the patch was applied (or was already
+     *   applied), false if `as4Plugin.getParamValue` isn't available
+     *   yet (page doesn't have AS4, or pm_advancedsearch4 hasn't
+     *   booted yet — in which case there's nothing to patch).
+     */
+    function patchAs4GetParamValue() {
+        try {
+            if (typeof window.as4Plugin !== 'object' || !window.as4Plugin) return false;
+            if (typeof window.as4Plugin.getParamValue !== 'function') return false;
+            if (window.as4Plugin.getParamValue.__orpPatched) return true;
+
+            var origGetParamValue = window.as4Plugin.getParamValue.bind(window.as4Plugin);
+            var wrapped = function (idSearch, paramName) {
+                try {
+                    if (!window.as4Plugin.params || !window.as4Plugin.params[idSearch]) {
+                        return '';
+                    }
+                    return origGetParamValue(idSearch, paramName);
+                } catch (e) {
+                    return '';
+                }
+            };
+            wrapped.__orpPatched = true;
+            window.as4Plugin.getParamValue = wrapped;
+            return true;
+        } catch (e) {
+            safeWarn('[ORP zonetheme] patchAs4GetParamValue threw:', e);
+            return false;
+        }
+    }
+
+    /**
      * Re-fetch the current URL and re-eval the as4Plugin.params inline
      * script. Returns a Promise that resolves with the number of params
      * blocks that were re-injected, or 0 if as4 isn't on the page.
@@ -312,7 +373,18 @@
      */
     function rebindAdvancedSearch4() {
         installAs4UpdateProductListHandler();
+        // Patch getParamValue FIRST, before the async rehydration starts.
+        // This closes the race window: if the user clicks an AS4 facet
+        // while rehydrateAs4Params() is in-flight, the wrapper returns
+        // '' instead of throwing on `params[idSearch]['as4_product...']`.
+        // Once rehydration completes, params are populated and the
+        // wrapper falls through to the original function.
+        patchAs4GetParamValue();
         return rehydrateAs4Params().then(function () {
+            // Re-patch in case as4Plugin was redefined during the
+            // synchronous re-eval of the params block — defensive,
+            // idempotent thanks to the __orpPatched flag.
+            patchAs4GetParamValue();
             return reinitAs4SearchBlocks();
         });
     }

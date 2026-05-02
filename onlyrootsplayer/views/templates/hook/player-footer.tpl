@@ -5,7 +5,7 @@
  * @author PixFeed - Marc Gueffie
  *}
 
-<div id="orp-player" class="orp-player" style="display:none;" data-playing="false" role="region" aria-label="{l s='Lecteur audio' d='Modules.Onlyrootsplayer.Shop'}">
+<div id="orp-player" class="orp-player" style="display:none;" data-playing="false" data-swup-persist="orp-player" role="region" aria-label="{l s='Lecteur audio' d='Modules.Onlyrootsplayer.Shop'}">
     <div class="orp-player-inner">
 
         <div class="orp-cover" id="orp-cover">
