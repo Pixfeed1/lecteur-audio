@@ -3,6 +3,90 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.20] — 2026-05-02
+
+Two corrections following the v2.5.19 production test:
+
+### Fixed — AS4 facet search broken when extension active (revert of v2.5.19 Patch 3)
+
+The v2.5.19 `patchAs4GetParamValue` defensive wrapper was too
+aggressive. It returned `''` whenever `as4Plugin.params[idSearch]`
+was undefined, which we assumed only happened during a 50–300ms
+race window after Swup `content:replace`. Operator confirmed in
+production that `as4Plugin.params[idSearch]` actually stays
+undefined **persistently** on certain pages — meaning the wrapper
+returned `''` for every `getParamValue` call, AS4 received no
+filter data, AJAX fired without filters, the product list never
+updated. Symptom: facet checkboxes tick visually but the listing
+doesn't change.
+
+**Action.** Removed the wrapper entirely (`patchAs4GetParamValue`
+function and its 2 call sites in `rebindAdvancedSearch4`). The
+underlying race-condition JS error from v2.5.19's monitor capture
+(`Cannot read properties of undefined (reading
+'as4_productFilterListData')`) returns, but it's a one-off console
+warning, not a user-facing bug. Trade-off: rare console warning
+acceptable, broken search is not.
+
+**Root cause unfixed for now.** Why `rehydrateAs4Params()` doesn't
+persistently populate `params[idSearch]` on certain pages is a
+separate investigation (probably timing or scope: `params` is
+re-created after each swap but evaluated in a different JS
+context than where `getParamValue` reads it). Tracked for a
+future release if it surfaces again.
+
+### Fixed — `ORP_INCLUDE_CONTACT` migration on upgrade
+
+The v2.5.19 install-default change from 0 to 1 only affected
+**fresh installs**. Operators upgrading from v2.5.18 or earlier
+kept their stored value of 0 in the Configuration table, so
+"audio on Contact" was never automatically enabled.
+
+**Action.** Added `upgrade/upgrade-2.5.20.php` which calls
+`Configuration::updateValue('ORP_INCLUDE_CONTACT', 1)` once when
+upgrading to 2.5.20 or later. PrestaShop runs upgrade scripts
+exactly once per version transition.
+
+Operators who actively prefer the previous behaviour (Contact
+excluded from Swup, audio interrupted on contact navigation) can
+still flip the toggle back to 0 in the BO config form after the
+upgrade. The migration sets the value, it doesn't lock it.
+
+### Out of scope for this release
+
+Two known issues confirmed in the v2.5.19 production test but not
+addressed here because they're outside the module's responsibility:
+
+- **Home rendered with degraded HTML on Swup nav from AS4-filtered
+  category** — `dom:diff` showed `imagesLoaded: 6/7` instead of the
+  normal ~253/322. The server returns a different (cache-polluted)
+  rendering of the home depending on AS4 search context in session.
+  This is a PrestaShop / Smarty / pm_advancedsearch4 server-side
+  issue, not in our control.
+- **`/en` (no trailing slash) duplicate Swup visits** — ZOneTheme's
+  logo links to `/en` instead of `/en/`, triggering a redundant
+  Swup nav. Cosmetic only (no audio loss, no broken DOM); fix would
+  belong in a theme override of `header.tpl`.
+
+### Note on Contact audio cuts (still possible after this release)
+
+Even with `ORP_INCLUDE_CONTACT=1`, the audio MAY still cut on
+Contact in some setups — not because of Swup behaviour but because
+**reCAPTCHA** and **Brevo Chat** modules touch `<html>.classList`
+and the DOM at the moment Contact loads, which can interfere with
+the audio element's playback context post-swap. This is a
+pre-existing issue from before v2.5.19 (intermittent on
+v2.5.18). If operator confirms persistent audio cuts on Contact:
+
+1. First check — toggle should be ON in BO config.
+2. If still cuts — workaround: re-add `/contact-us` and
+   `/fr/nous-contacter` to `ORP_EXTRA_EXCLUDES` in the BO, AND
+   disable the `displayHeader` hook of the recaptchapro module on
+   the Contact page.
+
+The "real" fix would require module-level guards against
+reCAPTCHA's DOM manipulation, which is out of scope here.
+
 ## [2.5.19] — 2026-05-02
 
 Three targeted patches stacked into one release. Audio continuity on
