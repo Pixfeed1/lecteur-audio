@@ -1600,6 +1600,34 @@
                     visit.__orpForceReload = true;
                 }
 
+                // Detect target pages that load Google reCAPTCHA. The
+                // external `https://www.google.com/recaptcha/api.js`
+                // does its own thing (creates verification iframes,
+                // mutates DOM, sometimes touches `<html>` styles) which
+                // breaks our audio context post-swap on every shop
+                // we've tested. The recaptchapro module loads it ONLY
+                // on Contact / login / register / password-reset pages
+                // (controllers `ContactController`, `AuthController`,
+                // etc.), so the impact is limited: audio continues on
+                // the 99% of nav (browsing products / categories), and
+                // only cuts on the 4-5 specific pages that actually
+                // load reCAPTCHA. Force a full reload there so the
+                // captcha widget renders correctly and reliably.
+                //
+                // Pattern matches the canonical Google reCAPTCHA URL.
+                // Won't match other captcha implementations (hCaptcha,
+                // Cloudflare Turnstile, etc.) — if those become an
+                // issue, add their patterns to the same regex.
+                if (html && /<script[^>]*src=["'][^"']*google\.com\/recaptcha\/api\.js/i.test(html)) {
+                    dlog('forceReload: target loads Google reCAPTCHA api.js');
+                    visit.__orpForceReload = true;
+                    if (window.__orpMonitorEnqueue) {
+                        try { window.__orpMonitorEnqueue('orp:force-reload', {
+                            reason: 'google-recaptcha-detected',
+                        }); } catch (e2) {}
+                    }
+                }
+
                 // Synchronize sidebar columns BEFORE Swup swaps #content-wrapper.
                 // Doing it here means the columns are in place when the new
                 // products land, and any layout-dependent JS (faceted search

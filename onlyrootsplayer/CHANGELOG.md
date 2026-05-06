@@ -3,6 +3,65 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.23] — 2026-05-02
+
+### Fixed — audio cuts on Contact (and other reCAPTCHA-loading pages)
+
+After analysing the `recaptchapro` module source, identified that it
+loads `https://www.google.com/recaptcha/api.js` (Google's external
+script) ONLY on pages where a captcha widget is needed:
+
+- Contact page (`ContactController`)
+- Authentication / Register
+- Password reset
+- Newsletter forms (sometimes)
+
+Google's `api.js` does its own DOM manipulation (creates verification
+iframes, mutates `<html>` styles, registers postMessage listeners),
+which interferes with our audio context after a Swup swap. We can't
+patch Google's code, and we can't prevent its loading without
+breaking the captcha functionality.
+
+### Solution — detect and force full reload on reCAPTCHA-loading pages
+
+In the `before:content:replace` hook, scan the target HTML for the
+canonical Google reCAPTCHA script tag pattern:
+
+```js
+/<script[^>]*src=["'][^"']*google\.com\/recaptcha\/api\.js/i
+```
+
+If matched, flag the visit with `__orpForceReload`. The post-swap
+handler reads that flag and triggers `window.location.replace(
+visit.to.url)` immediately, doing a clean full reload that
+isolates the reCAPTCHA initialization from our audio context.
+
+### Trade-off
+
+Audio continues on 99% of navigation (products, categories, home,
+CMS pages, search). Audio cuts on the ~4-5 pages that actually
+load reCAPTCHA — exactly the pages where the user is filling a form
+anyway, so audio interruption is minimally disruptive.
+
+The detection is content-based, not URL-based: any page that loads
+Google reCAPTCHA gets the force-reload regardless of its URL. This
+means if Kiéran enables reCAPTCHA on a different page later, it
+just works without config.
+
+### Telemetry
+
+A new `orp:force-reload` event fires with `reason:
+"google-recaptcha-detected"` when this path triggers, visible in
+the diagnostic monitor log when enabled.
+
+### What this doesn't fix
+
+Other captcha solutions (hCaptcha, Cloudflare Turnstile) aren't
+covered by the regex. If those become an issue we add their
+patterns to the same detection. Ditto for any other external
+script that breaks audio post-swap (analytics SDKs, chat widgets
+with aggressive DOM mutations, etc.).
+
 ## [2.5.22] — 2026-05-02
 
 ### Fixed — degraded home returned by Swup-fetched requests
