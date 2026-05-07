@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   3.0.0-alpha2
+ * @version   3.0.0-alpha3
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -83,7 +83,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '3.0.0-alpha2';
+        $this->version          = '3.0.0-alpha3';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -183,7 +183,6 @@ class OnlyRootsPlayer extends Module
 
         return parent::install()
             && $this->registerHook('displayFooter')
-            && $this->registerHook('displayBeforeBodyClosingTag')
             && $this->registerHook('displayHeader')
             && $this->registerHook('actionFrontControllerSetMedia')
             && $this->registerHook('actionObjectPappAudioPlaylistAddAfter')
@@ -954,6 +953,10 @@ class OnlyRootsPlayer extends Module
             'onlyrootsPlayerConfig' => [
                 'uploadBaseUrl'    => $this->getUploadBaseUrl(),
                 'apiUrl'           => $this->context->link->getModuleLink($this->name, 'playlist'),
+                // v3.0.0-alpha3+: bridge.js injects the iframe itself
+                // (no hook dependency) — needs the URL of the iframe
+                // controller endpoint here.
+                'frameUrl'         => $this->context->link->getModuleLink($this->name, 'frame'),
                 'storageKey'       => 'orp_state_v1',
                 'available'        => self::audioSourceAvailable(),
                 'swupEnabled'      => $swupEnabled,
@@ -984,38 +987,13 @@ class OnlyRootsPlayer extends Module
 
     public function hookDisplayFooter($params)
     {
-        // v3.0: the player UI no longer lives in the parent footer. It's
-        // rendered inside the persistent iframe injected via
-        // hookDisplayBeforeBodyClosingTag. This hook is kept registered
-        // for upgrade compatibility (existing installs may still have it
-        // hooked in the database) but returns an empty string to avoid
-        // rendering a duplicate player.
+        // v3.0: the player UI no longer lives in the parent footer. The
+        // iframe is now injected purely client-side by bridge.js (via
+        // its `ensureIframeInjected()` function called at boot). No PS
+        // hook dependency means the iframe shows up reliably regardless
+        // of the upgrade path or theme variations. This hook is kept
+        // registered for upgrade compatibility but returns nothing.
         return '';
-    }
-
-    /**
-     * Renders the persistent <iframe> at the very bottom of <body> on
-     * every front page. The iframe loads `frame.tpl` (served by the
-     * `frame.php` controller) which contains the audio engine + player
-     * UI. By living in its own document, the audio survives Swup swaps,
-     * full reloads, language switches, login flows, etc.
-     */
-    public function hookDisplayBeforeBodyClosingTag($params)
-    {
-        if (!self::audioSourceAvailable()) {
-            return '';
-        }
-        $frameUrl = $this->context->link->getModuleLink(
-            $this->name,
-            'frame',
-            [],
-            true
-        );
-        $this->context->smarty->assign([
-            'orp_audio_available' => true,
-            'orp_frame_url'       => $frameUrl,
-        ]);
-        return $this->fetch('module:' . $this->name . '/views/templates/hook/frame-injector.tpl');
     }
 
     /**

@@ -53,12 +53,50 @@
     var playlistCache   = {};           // productId → cached fetched playlist
 
     /* ============================================================ *
-     *  IFRAME DISCOVERY                                            *
+     *  IFRAME DISCOVERY / INJECTION                                *
+     *                                                              *
+     * v3.0.0-alpha3+: instead of relying on the                    *
+     * `displayBeforeBodyClosingTag` hook (which requires registration *
+     * in the ps_hook_module table that doesn't happen on upgrade), *
+     * bridge.js itself injects the iframe at boot. bridge.js is    *
+     * loaded via `actionFrontControllerSetMedia` which fires on    *
+     * EVERY front page reliably (proof: the integrated playlist on *
+     * product pages always shows up). Pure-JS injection means we   *
+     * have one fewer indirection AND the upgrade path becomes      *
+     * trivial (operator just refreshes — no hook re-registration   *
+     * needed).                                                     *
      * ============================================================ */
 
     function findIframe() {
         if (iframeEl && document.body.contains(iframeEl)) return iframeEl;
         iframeEl = document.getElementById('orp-frame');
+        return iframeEl;
+    }
+
+    function ensureIframeInjected() {
+        if (findIframe()) return iframeEl;
+        if (!CONFIG.frameUrl) {
+            dlog('CONFIG.frameUrl missing, cannot inject iframe');
+            return null;
+        }
+        try {
+            iframeEl = document.createElement('iframe');
+            iframeEl.id = 'orp-frame';
+            iframeEl.src = CONFIG.frameUrl;
+            iframeEl.title = 'Audio player';
+            iframeEl.scrolling = 'no';
+            iframeEl.setAttribute('allow', 'autoplay; encrypted-media');
+            iframeEl.setAttribute('loading', 'eager');
+            // data-swup-persist tells Swup (if present) to never touch
+            // this element across swaps.
+            iframeEl.setAttribute('data-swup-persist', 'orp-frame');
+            // Don't let the iframe steal Tab focus by default.
+            iframeEl.setAttribute('tabindex', '-1');
+            document.body.appendChild(iframeEl);
+            dlog('iframe injected', CONFIG.frameUrl);
+        } catch (e) {
+            dlog('iframe injection error', e);
+        }
         return iframeEl;
     }
 
@@ -106,6 +144,14 @@
             case 'ready':
                 iframeReady = true;
                 flushPendingCommand();
+                // If the iframe restored state from localStorage on a
+                // parent reload, ask it to send us a `state` snapshot
+                // so we can paint the mini-button + integrated
+                // playlist visuals correctly without the user having
+                // to interact first.
+                if (msg.restored) {
+                    postToIframe('request-state', {});
+                }
                 break;
             case 'track-changed':
                 if (typeof msg.productId !== 'undefined') {
@@ -206,9 +252,19 @@
         return isNaN(n) ? null : n;
     }
 
+    function getApiUrl() {
+        // hookDisplayHeader exposes the playlist endpoint URL as
+        // `apiUrl` on `onlyrootsPlayerConfig` (legacy v2.5.x name kept
+        // for compat). bridge.js consumes it under the same key.
+        return CONFIG.apiUrl || CONFIG.apiBase || '';
+    }
+
     function fetchAudioProductIds(ids) {
         if (!ids || ids.length === 0) return Promise.resolve([]);
-        var url = CONFIG.apiBase + '?action=batch&ids=' + encodeURIComponent(ids.join(','));
+        var base = getApiUrl();
+        if (!base) { dlog('apiUrl missing, cannot batch'); return Promise.resolve([]); }
+        var url = base + (base.indexOf('?') === -1 ? '?' : '&')
+                  + 'action=batch&ids=' + encodeURIComponent(ids.join(','));
         return fetch(url, { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (data) {
@@ -224,7 +280,10 @@
         if (playlistCache[productId]) {
             return Promise.resolve(playlistCache[productId]);
         }
-        var url = CONFIG.apiBase + '?id_product=' + encodeURIComponent(productId);
+        var base = getApiUrl();
+        if (!base) { dlog('apiUrl missing, cannot fetch playlist'); return Promise.resolve(null); }
+        var url = base + (base.indexOf('?') === -1 ? '?' : '&')
+                  + 'id_product=' + encodeURIComponent(productId);
         return fetch(url, { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(function (data) {
@@ -490,9 +549,10 @@
      * ============================================================ */
 
     function init() {
-        findIframe();
+        // Inject the iframe ourselves (no PS hook dependency).
+        ensureIframeInjected();
         if (!iframeEl) {
-            dlog('iframe not found in DOM, abort');
+            dlog('iframe could not be created, abort');
             return;
         }
 
@@ -502,15 +562,17 @@
         bindReinjectionTriggers();
         injectButtonsIntoCards(findProductCards());
         // Sync icons in case the integrated playlist is already on the
-        // page at boot AND the iframe has restored state from
-        // localStorage (the iframe will have sent us a `state` message
-        // by now if so).
+        // page at boot AND the iframe will restore state from
+        // localStorage. The 'state' message handler will re-sync once
+        // the iframe responds.
         syncIntegratedPlaylistIcons();
 
-        // Ask iframe for current state (if it survived a parent reload).
-        postToIframe('request-state', {});
+        // The iframe sends a 'ready' message via load event — until
+        // then, postToIframe queues commands. We don't need to
+        // explicitly request-state here because the iframe will send
+        // its own 'state' (with restored data) right after 'ready'.
 
-        dlog('bridge initialised');
+        dlog('bridge initialised, frameUrl=', CONFIG.frameUrl, 'apiUrl=', getApiUrl());
     }
 
     if (document.readyState === 'loading') {

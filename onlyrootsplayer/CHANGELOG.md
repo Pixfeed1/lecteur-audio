@@ -3,6 +3,103 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0-alpha3] — 2026-05-02
+
+Honest correction of v3.0.0-alpha2 — the alpha2 changelog claimed
+both bugs were fixed, but operator testing showed the player was
+still broken with TWO console errors:
+
+```
+frame:1                       Failed to load resource: 500
+undefined?id_product=153568:1 Failed to load resource: 404
+```
+
+Re-analysed each error. alpha2 fixed the hook registration but did
+NOT fix the root cause of either error. alpha3 actually fixes them.
+
+### Fixed for real — `frame:1` 500 (frame.php controller crash)
+
+The alpha2 frame.php had three issues that could each cause a 500:
+
+1. `$module instanceof OnlyRootsPlayer` — class name resolution in
+   the controller context isn't guaranteed; even a no-throw evaluation
+   to false meant we exit'd silently without rendering anything.
+2. `header(...)` calls were inside `init()` after `parent::init()`,
+   which itself sometimes emits headers — risk of "Headers already
+   sent" warnings on hardened PHP setups.
+3. `$this->context->smarty->fetch($absolutePath)` with a filesystem
+   path can fail on Smarty configurations that require the `module:`
+   prefix.
+
+**Fix in alpha3.** Rewrote frame.php:
+- Removed the `instanceof` check entirely
+- Moved security/cache `header()` calls to `initContent()` (before
+  any output)
+- Switched to `$this->context->smarty->fetch('module:' .
+  $moduleName . '/views/templates/front/frame.tpl')`
+- Defensive fallback: if the `module:` fetch throws, retry with
+  filesystem path; if that throws too, output a minimal HTML
+  comment + log to error_log
+- Removed `parent::init()` override — let PrestaShop set up the
+  controller normally, then handle output in `initContent()`
+
+### Fixed for real — `undefined?id_product=` 404
+
+bridge.js was reading `CONFIG.apiBase` which doesn't exist —
+`hookDisplayHeader` exposes the playlist endpoint as
+`CONFIG.apiUrl` (legacy v2.5.x name kept for compat). Concatenating
+`undefined + "?id_product=..."` produces the literal string
+`"undefined?id_product=..."` which the browser interprets as a
+relative URL → 404.
+
+**Fix in alpha3.** New `getApiUrl()` helper reads
+`CONFIG.apiUrl || CONFIG.apiBase || ''`. All `fetch(...)` call sites
+in bridge.js use this helper now, so the URL is always correct.
+
+### Architectural improvement — JS-injected iframe (operator suggestion)
+
+Operator quote: « la solution propre c'est de plus dépendre du hook
+PS et d'injecter l'iframe via JS depuis bridge.js. Le bridge.js est
+chargé par actionFrontControllerSetMedia qui lui marche partout
+(preuve : la playlist produit s'affiche, donc le module est bien
+actif). »
+
+Right. `actionFrontControllerSetMedia` always fires (it's how the
+playlist module-call works in alpha2). bridge.js is loaded reliably
+on every front page. So bridge.js can create the iframe element
+itself, no PS hook needed.
+
+**Done in alpha3:**
+- Added `ensureIframeInjected()` to bridge.js — creates a
+  `<iframe id="orp-frame">` at boot if it doesn't already exist,
+  with `data-swup-persist`, `allow="autoplay; encrypted-media"`,
+  the right `src` (CONFIG.frameUrl)
+- Added `frameUrl` to `Media::addJsDef` so bridge.js knows where
+  to point the iframe
+- Removed the `displayBeforeBodyClosingTag` hook registration from
+  `install()`
+- Removed `hookDisplayBeforeBodyClosingTag` PHP handler
+- Deleted `views/templates/hook/frame-injector.tpl` (obsolete)
+- Deleted `upgrade/upgrade-3.0.0.php` (no hook to register on
+  upgrade, so no migration needed)
+
+Net result: simpler architecture, fewer moving parts, no
+dependency on the theme rendering the `displayBeforeBodyClosingTag`
+hook (some themes don't), no upgrade migration needed.
+
+### What I'm NOT claiming this time
+
+- **Has not been tested in production yet.** I'm shipping this for
+  operator validation.
+- **iOS Safari user-gesture cross-frame still untested.** The
+  warmup-audio relay should work but hasn't been validated on a real
+  iPhone.
+- **Mini-button injection on AS4-rendered listings still
+  theoretical.** Will know once operator visits a category page.
+- **Other v2.5.x defensive code paths in player.js (which is no
+  longer loaded but still on disk) untouched.** Cleanup deferred to
+  v3.0.1 once v3.0 is stable.
+
 ## [3.0.0-alpha2] — 2026-05-02
 
 Hotfix for v3.0.0-alpha. Two operator-confirmed bugs after install
