@@ -3,6 +3,83 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.24] — 2026-05-02
+
+### Fixed — AS4 facet clicks intermittently doing nothing ("au début ça marche, après plus rien")
+
+Operator-confirmed pattern: AS4 search facets work correctly right
+after a fresh page load, but after a few Swup navigations they stop
+responding (click ticks the checkbox visually, but the product list
+doesn't update, no AJAX in network tab).
+
+**Root cause** — race condition between Swup's `content:replace` and
+SwupScriptsPlugin's re-execution of the inline `as4Plugin.params[N] =
+{...}` block from the new HTML. During the 50–300ms gap:
+
+1. Swup completes the swap → new DOM in place, including new
+   `.PM_ASBlockOutput[data-id-search="N"]` elements
+2. User can click a facet (the document-delegated handler installed
+   at first page load is still bound)
+3. Handler fires → triggers `as4-Criterion-Change` → handler in
+   `pm_advancedsearch.js` reads `as4Plugin.getParamValue(idSearch,
+   'stepSearch')`
+4. `getParamValue` does `as4Plugin.params[idSearch]['stepSearch']`
+5. **`as4Plugin.params[idSearch]` is `undefined`** for the new search
+   block (inline init script not yet re-executed)
+6. Property access on undefined → **THROW** → handler crash silently
+   → no `runSearch()` → no AJAX → user sees "click does nothing"
+
+The bug is intermittent because it depends on whether the user clicks
+fast enough to hit the race window. Slow clickers don't notice.
+
+### Solution — `preinitAs4Params(visit)`
+
+In the `before:content:replace` hook (which runs after the new HTML
+has been fetched but before the swap), scan the target document for
+`.PM_ASBlockOutput[data-id-search]` elements. For each, if
+`as4Plugin.params[idSearch]` is undefined, pre-populate it with safe
+defaults that match what the production server typically renders.
+
+Verified against production runtime on onlyroots-reggae.com
+(2026-05-02, F12 console snapshot of `window.as4Plugin.params` on
+three different categories: idSearch 1, 6, 8). All three had
+identical config:
+
+- `searchMethod: 1` (Instant search / change)
+- `stepSearch: 0` (no step search)
+- `scrollTopActive: true`
+- `keep_category_information: 0`
+- `insert_in_center_column: 0`
+- All `as4_*` and `seo_*` keys: empty string
+- `search_results_selector` varied (`#center-column` vs
+  `#content-wrapper`); chose `#content-wrapper` as the more recent /
+  common value
+
+Once the inline `<script>as4Plugin.params[N] = {...}</script>` block
+gets re-executed by SwupScriptsPlugin (a tick later), the real
+server-rendered values overwrite our defaults. No conflict.
+
+### Effect
+
+Click during race window:
+- `getParamValue(idSearch, 'stepSearch')` returns `0` (default)
+- `getParamValue(idSearch, 'searchMethod')` returns `1` (default)
+- `runSearch(idSearch, 1)` fires → `ajaxSubmit` → AJAX request → user
+  sees feedback (loading spinner, then results)
+
+**The handler never crashes**. The user always sees something happen
+on click, regardless of timing.
+
+### Trade-off
+
+If a future Kiéran reconfigures `searchMethod` to `2` or `3` for some
+specific search block (rare — operator usually uses the same mode
+shop-wide), our default `1` could trigger a different AJAX path
+during the race window. The next click (after inline script has run)
+uses the real values and works normally. So worst case: 1 misclick
+during 50–300ms after a swap. Acceptable given the alternative
+(complete crash → click does nothing).
+
 ## [2.5.23] — 2026-05-02
 
 ### Fixed — audio cuts on Contact (and other reCAPTCHA-loading pages)

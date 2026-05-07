@@ -1193,6 +1193,84 @@
     }
 
     /**
+     * Pre-populates `as4Plugin.params[idSearch]` with safe defaults for
+     * every `[data-id-search]` block detected in the freshly-fetched
+     * target HTML, before Swup applies the swap.
+     *
+     * Closes the race window where the user clicks an AS4 facet AFTER
+     * Swup `content:replace` but BEFORE `SwupScriptsPlugin` re-executes
+     * the inline `as4Plugin.params[N] = {...}` block from the new HTML
+     * (typically a 50–300ms gap). During that window, the original AS4
+     * `getParamValue(idSearch, varName)` reads
+     * `as4Plugin.params[idSearch][varName]` and THROWS with "Cannot
+     * read properties of undefined", because `params[idSearch]` is
+     * still empty for the new search block. The throw cascades up
+     * through the `as4-Criterion-Change` handler → no `runSearch()`
+     * → no AJAX → user sees "click does nothing".
+     *
+     * Solution: ensure `params[idSearch]` is always an object with the
+     * minimum keys AS4's read paths expect. Once the inline script
+     * runs (a tick later), it overwrites our defaults with the real
+     * server-rendered config. No conflict, no race.
+     *
+     * Defaults verified against production runtime on
+     * onlyroots-reggae.com (2026-05-02), F12 console snapshot of
+     * `JSON.stringify(window.as4Plugin.params)` on three different
+     * categories (idSearch 1, 6, 8). All three had identical:
+     *   - searchMethod: 1
+     *   - stepSearch: 0
+     *   - scrollTopActive: true
+     *   - keep_category_information: 0
+     *   - insert_in_center_column: 0
+     *   - all `as4_*` and `seo_*` keys: empty string
+     *
+     * `search_results_selector` varied between '#center-column' and
+     * '#content-wrapper' depending on theme version — '#content-wrapper'
+     * picked as the more recent / common value.
+     *
+     * @return {number} count of pre-init'd blocks
+     */
+    function preinitAs4Params(visit) {
+        try {
+            var doc = visit && visit.to && visit.to.document ? visit.to.document : null;
+            if (!doc) return 0;
+            if (typeof window.as4Plugin !== 'object' || !window.as4Plugin) return 0;
+            if (!window.as4Plugin.params) window.as4Plugin.params = [];
+
+            var blocks = doc.querySelectorAll('.PM_ASBlockOutput[data-id-search]');
+            var count = 0;
+            for (var i = 0; i < blocks.length; i++) {
+                var idSearch = blocks[i].getAttribute('data-id-search');
+                if (!idSearch) continue;
+                if (typeof window.as4Plugin.params[idSearch] !== 'undefined' &&
+                    window.as4Plugin.params[idSearch] !== null) continue;
+
+                window.as4Plugin.params[idSearch] = {
+                    hookName: '',
+                    centerColumnCssClasses: '',
+                    availableCriterionsGroups: {},
+                    selectedCriterions: {},
+                    stepSearch: 0,
+                    searchMethod: 1,
+                    keep_category_information: 0,
+                    search_results_selector: '#content-wrapper',
+                    insert_in_center_column: 0,
+                    seo_criterion_groups: '',
+                    as4_productFilterListData: '',
+                    as4_productFilterListSource: '',
+                    scrollTopActive: true,
+                    resetURL: '',
+                };
+                count++;
+            }
+            return count;
+        } catch (e) {
+            dlog('preinitAs4Params error', e);
+            return 0;
+        }
+    }
+
+    /**
      * Resolves the configured container selector(s) to an actual DOM element.
      * The setting accepts comma-separated selectors as fallbacks. We try them
      * in two passes:
@@ -1592,6 +1670,14 @@
                         s.setAttribute('data-swup-ignore-script', '');
                     }
                 });
+
+                // Pre-populate as4Plugin.params[idSearch] with safe defaults
+                // for every search block in the target HTML. Closes the race
+                // window where a click on an AS4 facet right after Swup
+                // content:replace would crash AS4's getParamValue() because
+                // params[idSearch] hasn't been re-populated yet by the
+                // inline script.
+                preinitAs4Params(visit);
 
                 // Detect target pages that need jQuery plugins we can't
                 // reach (webpack-scoped). Flag the visit so the post-swap
