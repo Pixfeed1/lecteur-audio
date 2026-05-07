@@ -3,6 +3,115 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0-alpha] — 2026-05-02
+
+Architectural rewrite. Audio engine moves out of the parent page DOM
+into a persistent same-origin iframe. **Operator-visible behaviour
+unchanged** — same player UI, same controls, same mini play buttons
+on product cards, same playlist API, same BO config. The whole point
+is structural: audio is now isolated from the parent page lifecycle
+and survives anything that happens to the parent (Swup swaps, full
+reloads, language switches, login flows, navigation back-forward,
+third-party module DOM mutations).
+
+### Why
+
+v2.5.x accumulated 24 patches fighting parent-side disruptions:
+- Swup hooks unhooking each other
+- ZOneTheme popstate hijack
+- AS4 race conditions
+- reCAPTCHA's external Google script tearing down the audio context
+- Brevo SDK init duplications
+- Bootstrap dropdown listener accumulation
+- Smarty cache pollution returning degraded HTML
+- ... and many more
+
+Each patch was reactive and added complexity. The structural fix is
+to put the audio in a separate document so none of those issues can
+ever touch it. The trade-off: cross-frame coordination via
+`postMessage`. We add ~700 lines of bridge.js + iframe-player.js but
+remove ~2000 lines of defensive workarounds.
+
+### What changed
+
+**New files:**
+- `controllers/front/frame.php` — serves the iframe HTML document
+  with appropriate security headers (X-Frame-Options: SAMEORIGIN,
+  Cache-Control, Referrer-Policy, X-Robots-Tag)
+- `views/templates/front/frame.tpl` — the iframe HTML, contains the
+  player UI markup IDENTICAL to v2.5.24 (same `orp-*` classes, same
+  SVG icons, same control structure)
+- `views/templates/hook/frame-injector.tpl` — inserts the
+  `<iframe id="orp-frame">` via `displayBeforeBodyClosingTag` at the
+  very bottom of `<body>`, marked `data-swup-persist`
+- `views/js/iframe-player.js` (~550 lines) — audio engine, player
+  UI controls, playlist queue, MediaSession API, localStorage
+  persistence, postMessage protocol with parent
+- `views/js/bridge.js` (~380 lines) — parent-side messenger:
+  mini-button injection on product cards, fetches the playlist on
+  click, postMessage to iframe to start playback, listens to iframe
+  messages to update mini-button "playing" highlight, iOS gesture
+  warm-up
+- `views/css/bridge.css` — parent-side styling (iframe positioning,
+  mini-button look)
+
+**Modified:**
+- `onlyrootsplayer.php`:
+  - Registers new hook `displayBeforeBodyClosingTag`
+  - `hookActionFrontControllerSetMedia` now loads `bridge.css` +
+    `bridge.js` instead of `player.css` + `player.js`. Swup libs +
+    theme preset + monitor still optional like before.
+  - `hookDisplayFooter` returns `''` (player UI moved to iframe)
+  - New `hookDisplayBeforeBodyClosingTag` renders the iframe injector
+
+**Unchanged:**
+- BO config form, all `ORP_*` configuration keys
+- Translation files (Shop + Admin XLF, fr-FR/en-US/en-GB)
+- Playlist API (`controllers/front/playlist.php`)
+- Monitor (`controllers/front/monitor.php`)
+- Theme presets (`views/js/themes/zonetheme.js`)
+- Papp replacement logic
+- Integrated product-page playlist (`product-playlist.tpl` + skin
+  CSS)
+
+### Status: alpha
+
+This is an alpha release. **Not tested in production.** Major
+unknowns:
+- iOS Safari user-gesture cross-frame handling
+  (`bridge.js`'s `bindIOSWarmup()` is the safety net but needs
+  validation on real iPhone)
+- Possible iframe double-load on certain Swup edge cases
+- Mini-button injection timing on AS4-rendered listings
+- localStorage state restoration UX (currently restores in paused
+  state, user clicks play to resume — same as Spotify Web)
+
+### Test before promoting to v3.0.0 stable
+
+1. Install on staging
+2. Verify play/pause/next/prev all work
+3. Verify mini-buttons appear on category pages
+4. Verify audio truly survives:
+   - Click Contact → audio stays playing
+   - Switch language → audio stays playing (or restored from
+     localStorage in paused state if browser blocks autoplay)
+   - Hard refresh (F5) → audio comes back paused, click play to
+     resume
+5. iOS Safari smoke test — first click anywhere triggers warm-up,
+   subsequent play/pause via mini-buttons should work
+
+### Files NOT yet cleaned up (Phase 2)
+
+- `views/templates/hook/player-footer.tpl` — still exists but no
+  longer rendered (hook returns `''`). Leave in place for now;
+  remove in v3.0.1 once v3.0 is stable.
+- `views/js/player.js` — no longer loaded but file still on disk.
+  Keep for forensics during alpha. Remove once v3.0 ships stable.
+- All v2.5.x defensive code paths in `player.js` (IGNORE_SCRIPT_PATTERNS
+  regex, popstate killer, AS4 wrapper rollback, force-reload on
+  reCAPTCHA, etc.) — no longer needed since audio is iframe-isolated.
+  Will be removed when player.js is removed.
+
 ## [2.5.24] — 2026-05-02
 
 ### Fixed — AS4 facet clicks intermittently doing nothing ("au début ça marche, après plus rien")

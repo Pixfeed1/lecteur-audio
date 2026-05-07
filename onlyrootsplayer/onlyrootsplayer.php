@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   2.5.24
+ * @version   3.0.0-alpha
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -83,7 +83,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '2.5.24';
+        $this->version          = '3.0.0-alpha';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -183,6 +183,7 @@ class OnlyRootsPlayer extends Module
 
         return parent::install()
             && $this->registerHook('displayFooter')
+            && $this->registerHook('displayBeforeBodyClosingTag')
             && $this->registerHook('displayHeader')
             && $this->registerHook('actionFrontControllerSetMedia')
             && $this->registerHook('actionObjectPappAudioPlaylistAddAfter')
@@ -827,20 +828,39 @@ class OnlyRootsPlayer extends Module
     {
         $modulePath = _PS_MODULE_DIR_ . $this->name . '/';
 
-        // CSS — versioned via filemtime to bypass browser cache after edits
-        $cssFile = 'modules/' . $this->name . '/views/css/player.css';
-        $cssVer  = $this->fileVersion($modulePath . 'views/css/player.css');
-        $this->context->controller->registerStylesheet(
-            'onlyrootsplayer-css',
-            $cssFile,
-            ['media' => 'all', 'priority' => 200, 'version' => $cssVer]
-        );
+        // v3.0 architecture: the audio engine + player UI now live INSIDE
+        // the persistent iframe (loaded via frame-injector.tpl + frame.php
+        // controller). The parent page only needs:
+        //   - bridge.css : minimal styling for iframe positioning + the
+        //                  mini play buttons injected on product cards
+        //   - bridge.js  : parent-side messenger, mini-button injection,
+        //                  postMessage protocol, iOS gesture warm-up
+        //
+        // The big player.css and player.js (~2400 lines) are NOT loaded
+        // in the parent any more. player.css is loaded inside the iframe
+        // by frame.tpl. player.js is replaced by iframe-player.js (also
+        // inside the iframe).
+        //
+        // Swup libs + theme preset are still loaded if enabled — the
+        // parent page can use Swup for fluid SPA navigation, but the
+        // audio survival is no longer dependent on it (iframe survives
+        // any kind of navigation).
 
-        // Skin CSS for the integrated product-page playlist — only when the
-        // operator has enabled the Papp replacement mode AND we're rendering
-        // the playlist. We register on every front page (not just product
-        // pages) because Swup's content swap brings the playlist markup
-        // into the same DOM that the initial-load <head> sees.
+        // Bridge CSS (parent-side: iframe positioning + mini-buttons)
+        $bridgeCssRel  = 'views/css/bridge.css';
+        $bridgeCssPath = $modulePath . $bridgeCssRel;
+        if (file_exists($bridgeCssPath)) {
+            $this->context->controller->registerStylesheet(
+                'onlyrootsplayer-bridge-css',
+                'modules/' . $this->name . '/' . $bridgeCssRel,
+                ['media' => 'all', 'priority' => 200, 'version' => $this->fileVersion($bridgeCssPath)]
+            );
+        }
+
+        // Skin CSS for the integrated product-page playlist (Papp
+        // replacement mode). Still loaded in the parent because the
+        // playlist DOM is rendered inside the parent's product page,
+        // not inside the iframe.
         if ((int) Configuration::get(self::CFG_REPLACE_PAPP_PLAYER) === 1) {
             $skin       = $this->getProductPlayerSkin();
             $skinFile   = 'views/css/product-playlist-skin-' . $skin . '.css';
@@ -854,7 +874,10 @@ class OnlyRootsPlayer extends Module
             }
         }
 
-        // Swup libs (only if Swup is enabled for this request)
+        // Swup libs (only if Swup is enabled for this request).
+        // Swup is now OPTIONAL in v3: even without it (full reloads on
+        // every nav), the audio survives because it lives in the
+        // persistent iframe.
         if ($this->isSwupEnabledForCurrentRequest()) {
             $base = 'modules/' . $this->name . '/views/js/lib/';
             $libs = [
@@ -875,9 +898,10 @@ class OnlyRootsPlayer extends Module
             }
         }
 
-        // Theme reinit preset (registered BEFORE player.js so the preset
-        // function is defined on `window.orpThemePresets` by the time the
-        // player's content:replace hook runs and wants to call it).
+        // Theme reinit preset — kept for parent-side theme reinit on Swup
+        // swaps (megamenu, sliders, sticky header). The audio doesn't need
+        // it any more (iframe is immune) but the rest of the page still
+        // benefits from the reinit pass.
         $preset = $this->getThemePreset();
         if ($preset !== self::THEME_PRESET_NONE) {
             $presetRel  = 'views/js/themes/' . $preset . '.js';
@@ -891,9 +915,7 @@ class OnlyRootsPlayer extends Module
             }
         }
 
-        // Diagnostic monitor (opt-in). Loaded BEFORE player.js so the
-        // monitor's window.onerror handler is in place before our own code
-        // can throw — gives us coverage on player.js init errors too.
+        // Diagnostic monitor (opt-in)
         if ((int) Configuration::get(self::CFG_MONITOR_ENABLED) === 1) {
             $monitorPath = $modulePath . 'views/js/monitor.js';
             if (file_exists($monitorPath)) {
@@ -905,13 +927,18 @@ class OnlyRootsPlayer extends Module
             }
         }
 
-        // Player JS
-        $jsVer = $this->fileVersion($modulePath . 'views/js/player.js');
-        $this->context->controller->registerJavascript(
-            'onlyrootsplayer-js',
-            'modules/' . $this->name . '/views/js/player.js',
-            ['position' => 'bottom', 'priority' => 200, 'version' => $jsVer]
-        );
+        // Bridge JS (parent-side messenger). Replaces v2.5.x player.js
+        // in the parent. The audio engine itself is in iframe-player.js
+        // loaded separately by frame.tpl.
+        $bridgeJsRel  = 'views/js/bridge.js';
+        $bridgeJsPath = $modulePath . $bridgeJsRel;
+        if (file_exists($bridgeJsPath)) {
+            $this->context->controller->registerJavascript(
+                'onlyrootsplayer-bridge-js',
+                'modules/' . $this->name . '/' . $bridgeJsRel,
+                ['position' => 'bottom', 'priority' => 200, 'version' => $this->fileVersion($bridgeJsPath)]
+            );
+        }
     }
 
     public function hookDisplayHeader($params)
@@ -957,20 +984,38 @@ class OnlyRootsPlayer extends Module
 
     public function hookDisplayFooter($params)
     {
+        // v3.0: the player UI no longer lives in the parent footer. It's
+        // rendered inside the persistent iframe injected via
+        // hookDisplayBeforeBodyClosingTag. This hook is kept registered
+        // for upgrade compatibility (existing installs may still have it
+        // hooked in the database) but returns an empty string to avoid
+        // rendering a duplicate player.
+        return '';
+    }
+
+    /**
+     * Renders the persistent <iframe> at the very bottom of <body> on
+     * every front page. The iframe loads `frame.tpl` (served by the
+     * `frame.php` controller) which contains the audio engine + player
+     * UI. By living in its own document, the audio survives Swup swaps,
+     * full reloads, language switches, login flows, etc.
+     */
+    public function hookDisplayBeforeBodyClosingTag($params)
+    {
         if (!self::audioSourceAvailable()) {
             return '';
         }
-        // Don't render the persistent player on pages we've excluded from
-        // Swup (contact, sitemap, stores...). Those pages get a full reload
-        // so the audio is interrupted anyway, and showing the player with
-        // a stale track from a possibly-disabled product is confusing
-        // (operator-confirmed feedback after v2.5.2: the contact page kept
-        // displaying the previously-played title even after the product was
-        // disabled in the catalogue).
-        if ($this->isCurrentRequestExcludedFromSwup()) {
-            return '';
-        }
-        return $this->fetch('module:' . $this->name . '/views/templates/hook/player-footer.tpl');
+        $frameUrl = $this->context->link->getModuleLink(
+            $this->name,
+            'frame',
+            [],
+            true
+        );
+        $this->context->smarty->assign([
+            'orp_audio_available' => true,
+            'orp_frame_url'       => $frameUrl,
+        ]);
+        return $this->fetch('module:' . $this->name . '/views/templates/hook/frame-injector.tpl');
     }
 
     /**

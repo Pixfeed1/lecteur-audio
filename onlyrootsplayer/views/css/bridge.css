@@ -1,0 +1,96 @@
+/**
+ * OnlyRoots Persistent Audio Player — parent-side CSS (v3.0)
+ *
+ * Two responsibilities:
+ *   1. Position the persistent <iframe id="orp-frame"> at the bottom
+ *      of the parent viewport.
+ *   2. Style the mini play buttons (.orp-card-play) injected into
+ *      product card miniatures by bridge.js.
+ *
+ * The full player UI styling stays in player.css and is loaded
+ * INSIDE the iframe (frame.tpl), not here. This file is intentionally
+ * minimal — the iframe document is responsible for its own internals.
+ */
+
+#orp-frame {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 72px;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    z-index: 99998;
+    /* Pointer events are pass-through where the iframe document is
+       transparent; the player UI inside picks up clicks on its own
+       controls. */
+    background: transparent;
+    /* Don't allow the iframe to be selected as a tab focus trap by
+       default — the focus moves via the mini-buttons + the player UI
+       inside. */
+    overflow: hidden;
+}
+
+/* On mobile, slight increase to fit larger touch targets. */
+@media (max-width: 768px) {
+    #orp-frame { height: 84px; }
+}
+
+/* Push the page footer up a bit so the iframe doesn't cover the very
+   bottom of normal page content. */
+body {
+    --orp-frame-height: 72px;
+    padding-bottom: var(--orp-frame-height);
+}
+
+@media (max-width: 768px) {
+    body { --orp-frame-height: 84px; }
+}
+
+/* ================================================================ *
+ *  MINI PLAY BUTTON (injected on product cards)                    *
+ * ================================================================ */
+
+.orp-card-play {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    margin: 0 6px 0 0;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    vertical-align: middle;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+.orp-card-play:hover,
+.orp-card-play:focus {
+    background-color: currentColor;
+    outline: none;
+}
+.orp-card-play:hover svg,
+.orp-card-play:focus svg {
+    fill: #fff;
+    color: #fff;
+}
+.orp-card-play svg {
+    width: 12px;
+    height: 12px;
+    fill: currentColor;
+    pointer-events: none;
+}
+
+/* "Currently playing this product" highlight */
+.orp-card-play--playing {
+    background-color: currentColor;
+    color: inherit;
+}
+.orp-card-play--playing svg {
+    fill: #fff;
+}
