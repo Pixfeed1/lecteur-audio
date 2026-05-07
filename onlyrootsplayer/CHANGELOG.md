@@ -3,6 +3,58 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0-alpha2] — 2026-05-02
+
+Hotfix for v3.0.0-alpha. Two operator-confirmed bugs after install
+on the OnlyRoots Reggae production shop:
+
+### Fixed — iframe not visible after upgrade from v2.5.x
+
+The new `displayBeforeBodyClosingTag` hook is registered in the
+module's `install()` method, but `install()` doesn't run when an
+existing install upgrades — only on fresh install. Existing v2.5.x
+installs upgrading to v3.0.0-alpha never got the hook in the
+`ps_hook_module` table, so the iframe was never injected and the
+player was completely invisible.
+
+**Fix.** Added `upgrade/upgrade-3.0.0.php` which calls
+`$module->registerHook('displayBeforeBodyClosingTag')`. PrestaShop
+runs this script automatically on the version transition.
+
+### Fixed — clicks on integrated product playlist did nothing
+
+On product pages with the Papp replacement enabled, the integrated
+playlist (rendered by `product-playlist.tpl`) shows track buttons
+with `data-track-*` attributes. In v2.5.x these were caught by
+`player.js` click handlers. v3.0.0-alpha removed `player.js` from
+the parent without porting those handlers — so clicking a track in
+the integrated playlist did nothing.
+
+**Fix.** Added a delegated click handler in `bridge.js` for
+`.orp-product-playlist .orp-track-play`. Clicking a track:
+1. Looks up the playlist for that product (cached after first fetch)
+2. `postMessage('load')` to the iframe with `playlist` + `startIndex`
+3. iframe loads the playlist and starts at the clicked track
+
+Also extended the iframe-player.js `load` message to accept
+`startIndex` (defaults to 0 for backward compat with mini-button
+clicks from product cards).
+
+Visual icon sync: `bridge.js` now listens for `track-changed` and
+`playing-state` messages from the iframe and updates the play/pause
+icons + the row highlight on every `.orp-track-play` button to
+reflect what's currently playing. The integrated playlist UX is
+visually identical to v2.5.x.
+
+### Files changed
+
+- `upgrade/upgrade-3.0.0.php` (new)
+- `views/js/bridge.js` (added integrated playlist handler + icon
+  sync, ~80 new lines)
+- `views/js/iframe-player.js` (added startIndex support in load
+  message handler)
+- `config.xml` + `onlyrootsplayer.php` (version bump)
+
 ## [3.0.0-alpha] — 2026-05-02
 
 Architectural rewrite. Audio engine moves out of the parent page DOM

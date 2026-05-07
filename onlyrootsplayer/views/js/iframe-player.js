@@ -417,7 +417,10 @@
                 playlist = Array.isArray(msg.playlist) ? msg.playlist : [];
                 if (playlist.length === 0) return;
                 hasUserInteracted = true; // load command implies a click happened
-                loadTrack(0, { autoplay: msg.autoplay !== false });
+                var startIdx = (typeof msg.startIndex === 'number' && msg.startIndex >= 0 && msg.startIndex < playlist.length)
+                    ? msg.startIndex
+                    : 0;
+                loadTrack(startIdx, { autoplay: msg.autoplay !== false });
                 break;
 
             case 'play':       hasUserInteracted = true; play();        break;

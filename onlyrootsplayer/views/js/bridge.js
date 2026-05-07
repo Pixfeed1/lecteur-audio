@@ -47,7 +47,10 @@
     var pendingCommand = null;          // queued command if iframe not ready yet
     var hasWarmedUp = false;            // iOS gesture relay sent at least once
     var currentPlayingProductId = null; // for mini-button highlighting
+    var currentPlayingTrackIdx  = -1;   // for integrated playlist row highlighting
+    var currentIsPlaying        = false; // for play/pause icon swap on track buttons
     var audioProductIds = new Set();    // products that have audio (cached)
+    var playlistCache   = {};           // productId → cached fetched playlist
 
     /* ============================================================ *
      *  IFRAME DISCOVERY                                            *
@@ -105,19 +108,35 @@
                 flushPendingCommand();
                 break;
             case 'track-changed':
-                if (msg.productId) {
-                    setCurrentPlayingProduct(msg.productId);
+                if (typeof msg.productId !== 'undefined') {
+                    setCurrentPlaying(msg.productId, typeof msg.trackIndex === 'number' ? msg.trackIndex : -1, true);
                 }
                 break;
             case 'playing-state':
-                if (msg.isPlaying === false) {
-                    setCurrentPlayingProduct(null);
+                currentIsPlaying = !!msg.isPlaying;
+                if (currentIsPlaying === false) {
+                    // Don't reset productId/trackIndex on pause — the
+                    // user can resume. But update icon state.
+                    syncIntegratedPlaylistIcons();
+                } else {
+                    syncIntegratedPlaylistIcons();
                 }
                 break;
             case 'closed':
-                setCurrentPlayingProduct(null);
+                setCurrentPlaying(null, -1, false);
                 break;
-            // 'state', 'visibility', 'play-rejected', 'ended', 'error' —
+            case 'state':
+                // Iframe responded to our request-state. Sync our
+                // mini-button + integrated-playlist visuals to match.
+                if (typeof msg.productId !== 'undefined' && msg.productId !== null) {
+                    setCurrentPlaying(
+                        msg.productId,
+                        typeof msg.currentIdx === 'number' ? msg.currentIdx : -1,
+                        !!msg.isPlaying
+                    );
+                }
+                break;
+            // 'visibility', 'play-rejected', 'ended', 'error' —
             // we don't need to do anything in the parent for those.
         }
     }
@@ -200,9 +219,20 @@
     }
 
     function fetchPlaylist(productId) {
+        // Per-session cache so navigating away and back doesn't refetch
+        // the same playlist. Keyed by productId.
+        if (playlistCache[productId]) {
+            return Promise.resolve(playlistCache[productId]);
+        }
         var url = CONFIG.apiBase + '?id_product=' + encodeURIComponent(productId);
         return fetch(url, { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data && Array.isArray(data.tracks)) {
+                    playlistCache[productId] = data;
+                }
+                return data;
+            })
             .catch(function (e) { dlog('fetchPlaylist error', e); return null; });
     }
 
@@ -292,27 +322,133 @@
                 productName: data.product_name || name,
                 productUrl:  data.product_url  || url,
                 playlist:    data.tracks,
+                startIndex:  0,
                 autoplay:    true,
             });
         });
     }
 
     /* ============================================================ *
+     *  INTEGRATED PRODUCT PLAYLIST CLICK HANDLER                   *
+     *                                                              *
+     * On product pages (when the operator has enabled              *
+     * CFG_REPLACE_PAPP_PLAYER), product-playlist.tpl renders a     *
+     * full track listing inside the product description with one   *
+     * `<button class="orp-track-play">` per track. In v2.5.x       *
+     * these clicks were caught by player.js. In v3, player.js is   *
+     * gone and we handle them here in the parent-side bridge —     *
+     * postMessage to the iframe with the playlist + the clicked    *
+     * track's index as the starting point.                         *
+     * ============================================================ */
+
+    function handleIntegratedTrackClick(btn) {
+        var productId  = parseInt(btn.getAttribute('data-product-id'), 10);
+        var trackIdx   = parseInt(btn.getAttribute('data-track-index'), 10);
+        if (isNaN(productId) || isNaN(trackIdx)) return;
+
+        dlog('integrated track clicked', productId, trackIdx);
+
+        // Same product, same track, currently playing → toggle pause.
+        if (productId === currentPlayingProductId
+            && trackIdx === currentPlayingTrackIdx
+            && currentIsPlaying) {
+            postToIframe('toggle', {});
+            return;
+        }
+
+        // Same product but different track → just send a load with
+        // startIndex (we likely have the playlist cached).
+        // Different product → fetch playlist if not cached.
+        var productLink = '';
+        var productName = '';
+        try {
+            var pageH1 = document.querySelector('.product-detail-name, h1.product-name, h1[itemprop="name"]');
+            if (pageH1) productName = (pageH1.textContent || '').trim();
+            productLink = window.location.href;
+        } catch (e) {}
+
+        fetchPlaylist(productId).then(function (data) {
+            if (!data || !data.tracks || data.tracks.length === 0) {
+                dlog('no playlist for product', productId);
+                return;
+            }
+            var safeIdx = (trackIdx >= 0 && trackIdx < data.tracks.length) ? trackIdx : 0;
+            postToIframe('load', {
+                productId:   productId,
+                productName: data.product_name || productName,
+                productUrl:  data.product_url  || productLink,
+                playlist:    data.tracks,
+                startIndex:  safeIdx,
+                autoplay:    true,
+            });
+        });
+    }
+
+    function bindIntegratedPlaylistDelegate() {
+        // Delegated click on document so it works for the playlist
+        // markup whether it was rendered server-side or injected by
+        // a Swup swap or AS4 listing update.
+        document.addEventListener('click', function (ev) {
+            try {
+                if (!ev.target || !ev.target.closest) return;
+                var btn = ev.target.closest('.orp-product-playlist .orp-track-play');
+                if (!btn) return;
+                ev.preventDefault();
+                ev.stopPropagation();
+                handleIntegratedTrackClick(btn);
+            } catch (e) { dlog('integrated click delegate error', e); }
+        }, false);
+    }
+
+    /* ============================================================ *
      *  CURRENT PLAYING TRACKING                                    *
      * ============================================================ */
 
-    function setCurrentPlayingProduct(productId) {
-        if (currentPlayingProductId === productId) return;
-        // Remove old highlight
-        if (currentPlayingProductId !== null) {
-            var oldBtns = document.querySelectorAll('.orp-card-play[data-orp-product="' + currentPlayingProductId + '"]');
-            for (var i = 0; i < oldBtns.length; i++) oldBtns[i].classList.remove('orp-card-play--playing');
+    function setCurrentPlaying(productId, trackIdx, isPlaying) {
+        // Update mini-button highlight on miniature cards.
+        if (currentPlayingProductId !== productId) {
+            if (currentPlayingProductId !== null) {
+                var oldBtns = document.querySelectorAll('.orp-card-play[data-orp-product="' + currentPlayingProductId + '"]');
+                for (var i = 0; i < oldBtns.length; i++) oldBtns[i].classList.remove('orp-card-play--playing');
+            }
+            currentPlayingProductId = productId;
+            if (productId !== null) {
+                var newBtns = document.querySelectorAll('.orp-card-play[data-orp-product="' + productId + '"]');
+                for (var j = 0; j < newBtns.length; j++) newBtns[j].classList.add('orp-card-play--playing');
+            }
         }
-        currentPlayingProductId = productId;
-        if (productId !== null) {
-            var newBtns = document.querySelectorAll('.orp-card-play[data-orp-product="' + productId + '"]');
-            for (var j = 0; j < newBtns.length; j++) newBtns[j].classList.add('orp-card-play--playing');
-        }
+        currentPlayingTrackIdx = (typeof trackIdx === 'number' ? trackIdx : -1);
+        currentIsPlaying = !!isPlaying;
+        syncIntegratedPlaylistIcons();
+    }
+
+    /**
+     * Updates the play/pause icon visibility on every `.orp-track-play`
+     * button in the integrated product playlist (rendered by
+     * product-playlist.tpl). Only the row matching the currently
+     * playing track shows the pause icon; all others show play.
+     */
+    function syncIntegratedPlaylistIcons() {
+        try {
+            var rows = document.querySelectorAll('.orp-product-playlist .orp-track-play');
+            for (var i = 0; i < rows.length; i++) {
+                var btn       = rows[i];
+                var pid       = parseInt(btn.getAttribute('data-product-id'), 10);
+                var idx       = parseInt(btn.getAttribute('data-track-index'), 10);
+                var isThisOne = (currentIsPlaying
+                                 && pid === currentPlayingProductId
+                                 && idx === currentPlayingTrackIdx);
+                var iconPlay  = btn.querySelector('.orp-track-play__icon--play');
+                var iconPause = btn.querySelector('.orp-track-play__icon--pause');
+                if (iconPlay)  iconPlay.style.display  = isThisOne ? 'none' : '';
+                if (iconPause) iconPause.style.display = isThisOne ? '' : 'none';
+                var row = btn.closest('.orp-product-playlist__track');
+                if (row) {
+                    if (isThisOne) row.classList.add('orp-product-playlist__track--playing');
+                    else row.classList.remove('orp-product-playlist__track--playing');
+                }
+            }
+        } catch (e) { dlog('syncIntegratedPlaylistIcons error', e); }
     }
 
     /* ============================================================ *
@@ -362,8 +498,14 @@
 
         window.addEventListener('message', onIframeMessage, false);
         bindIOSWarmup();
+        bindIntegratedPlaylistDelegate();
         bindReinjectionTriggers();
         injectButtonsIntoCards(findProductCards());
+        // Sync icons in case the integrated playlist is already on the
+        // page at boot AND the iframe has restored state from
+        // localStorage (the iframe will have sent us a `state` message
+        // by now if so).
+        syncIntegratedPlaylistIcons();
 
         // Ask iframe for current state (if it survived a parent reload).
         postToIframe('request-state', {});

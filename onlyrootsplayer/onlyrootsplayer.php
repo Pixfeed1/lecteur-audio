@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   3.0.0-alpha
+ * @version   3.0.0-alpha2
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -83,7 +83,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '3.0.0-alpha';
+        $this->version          = '3.0.0-alpha2';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
