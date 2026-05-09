@@ -3,6 +3,50 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0-alpha6] — 2026-05-09
+
+The alpha5 self-reporting worked perfectly: the operator overlay
+showed the *exact* PHP error that caused the alpha4 frame.php 500 —
+
+```
+Error: Call to protected method ModuleCore::trans() from scope
+OnlyrootsplayerFrameModuleFrontController
+(controllers/front/frame.php:137)
+```
+
+`Module::trans()` is `protected` in PrestaShop 8. The alpha4
+frame.php called it as `$module->trans(...)` from the controller,
+which is illegal (only the Module class itself or its descendants
+can invoke it).
+
+### Fixed — use the public Translator API
+
+The Context provides a public `Translator` (Symfony component).
+That's the supported way to translate from outside a Module class.
+Replaced:
+
+```php
+// Before (alpha4): illegal — protected method
+$module = Module::getInstanceByName($moduleName);
+$module->trans($source, [], 'Modules.Onlyrootsplayer.Shop');
+
+// After (alpha6): supported public API
+$translator = $this->context->getTranslator();
+$translator->trans($source, [], 'Modules.Onlyrootsplayer.Shop');
+```
+
+Defensive: `getTranslator()` is wrapped in try/catch and falls back
+to the source string if the translator can't be obtained for any
+reason (very early init, unusual context state, etc.).
+
+### Why alpha5's diagnostic was the right structural choice
+
+Without the alpha5 self-reporting layer, this bug would have
+required server-log access to diagnose. With it, the operator saw
+the exact PHP error in the browser overlay and could report it
+verbatim — turning a multi-hour log-spelunking session into a
+one-line bug report.
+
 ## [3.0.0-alpha5] — 2026-05-09
 
 Follow-up to alpha4. Operator test surfaced a `frame.php` 500 with

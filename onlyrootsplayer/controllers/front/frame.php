@@ -127,15 +127,23 @@ class OnlyrootsplayerFrameModuleFrontController extends ModuleFrontController
         $parentOrigin = $parentScheme . Tools::getHttpHost(false);
         $parentOriginJs = json_encode($parentOrigin);
 
-        // L10n strings — translate via the module if possible, otherwise
-        // fall back to the source string. Either way we json_encode for
-        // safe embedding in the inline <script>.
-        $module = Module::getInstanceByName($moduleName);
-        $tr = function ($source) use ($module) {
-            if ($module && method_exists($module, 'trans')) {
+        // L10n strings — use the public Translator API from the
+        // Context. Module::trans() is `protected` in PrestaShop 8 so
+        // calling it from outside the Module class throws
+        // "Call to protected method ModuleCore::trans()". The
+        // Context translator is the supported public-API equivalent.
+        $translator = null;
+        try {
+            if ($this->context && method_exists($this->context, 'getTranslator')) {
+                $translator = $this->context->getTranslator();
+            }
+        } catch (Throwable $e) { /* translator unavailable, fallback */ }
+
+        $tr = function ($source) use ($translator) {
+            if ($translator && method_exists($translator, 'trans')) {
                 try {
-                    return $module->trans($source, [], 'Modules.Onlyrootsplayer.Shop');
-                } catch (Exception $e) { /* fallthrough */ }
+                    return $translator->trans($source, [], 'Modules.Onlyrootsplayer.Shop');
+                } catch (Throwable $e) { /* fallthrough to source */ }
             }
             return $source;
         };
