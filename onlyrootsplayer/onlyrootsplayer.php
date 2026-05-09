@@ -12,7 +12,7 @@
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
  * @license   Proprietary
- * @version   3.0.0-alpha3
+ * @version   3.0.0-alpha4
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -83,7 +83,7 @@ class OnlyRootsPlayer extends Module
     {
         $this->name             = 'onlyrootsplayer';
         $this->tab              = 'front_office_features';
-        $this->version          = '3.0.0-alpha3';
+        $this->version          = '3.0.0-alpha4';
         $this->author           = 'PixFeed';
         $this->need_instance    = 0;
         $this->bootstrap        = true;
@@ -953,7 +953,7 @@ class OnlyRootsPlayer extends Module
             'onlyrootsPlayerConfig' => [
                 'uploadBaseUrl'    => $this->getUploadBaseUrl(),
                 'apiUrl'           => $this->context->link->getModuleLink($this->name, 'playlist'),
-                // v3.0.0-alpha3+: bridge.js injects the iframe itself
+                // v3.0.0-alpha4+: bridge.js injects the iframe itself
                 // (no hook dependency) — needs the URL of the iframe
                 // controller endpoint here.
                 'frameUrl'         => $this->context->link->getModuleLink($this->name, 'frame'),

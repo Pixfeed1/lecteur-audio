@@ -3,6 +3,103 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0-alpha4] — 2026-05-09
+
+Structural reliability pass — not band-aids. The alpha3 install was
+still failing for the operator (player not visible, no clear error)
+and the v3 boot sequence had three classes of silent-failure modes
+that this release rebuilds rather than patches around.
+
+Operator quote that drove the redesign: « je veux pas des rustines
+mais des améliorations structurelles qui éviteront les problèmes ».
+
+### Structural — `frame.php` no longer depends on Smarty
+
+The alpha3 `frame.php` rendered through `$context->smarty->fetch()`
+with a `module:` prefix and a filesystem fallback. Each path has its
+own failure modes (theme override conflicts, `module:` path resolver,
+escaping modifiers, "Smarty fetch failed" 500s) and produces a 500
+that the operator can only diagnose with server-side log access.
+
+**alpha4 rewrite.** The controller emits the iframe HTML directly
+via PHP heredoc — no template file, no Smarty context, no theme
+override surface. All variables (`$cssUrl`, `$jsUrl`, `$l10nJs`,
+`$parentOriginJs`) are interpolated inline. L10n strings still go
+through `$module->trans(...)` when the module instance is available,
+falling back to the source string otherwise.
+
+Files: `controllers/front/frame.php` rewritten (208 lines, no
+Smarty fetch); `views/templates/front/frame.tpl` deleted.
+
+### Structural — bridge.js self-diagnostic with visible debug overlay
+
+Previous boot failures surfaced as "the player isn't visible" with
+nothing in the parent console. F12 was needed to find the actual
+cause (typically a missing CONFIG key or a non-200 frame response).
+
+**alpha4 adds a self-diagnostic system.** Every boot phase calls
+`recordStep(label, ok, detail)` with a clear label
+(`config-present`, `iframe-url-resolved`, `iframe-injected`,
+`iframe-load-verify`, `message-listener-bound`,
+`ios-warmup-bound`, `integrated-playlist-delegate-bound`,
+`reinjection-triggers-bound`, `initial-card-buttons-injected`,
+`integrated-icons-synced`).
+
+If any step fails AND the BO debug toggle is on, a red banner
+appears at the top of the page with the failed step labels and
+their details. Operators no longer need F12 to know what broke.
+
+The overlay has a `[×]` close button so the operator can dismiss
+it when they want to test the rest of the page.
+
+### Structural — frame URL deduction fallback
+
+`bridge.js` previously aborted with `dlog('CONFIG.frameUrl missing')`
+if `window.onlyrootsPlayerConfig` was absent or had no `frameUrl`.
+Causes seen in production: a 3rd-party module overwriting the
+global, a theme inlining its own `<script>` after ours, a JS error
+between `Media::addJsDef` and bridge.js eval.
+
+**alpha4 adds `deduceFrameUrl()`.** If `CONFIG.frameUrl` is unset,
+the URL is reconstructed from `window.location` using PrestaShop's
+canonical module-link pattern: `<origin>[/<lang>]/module/<name>/<action>`.
+The lang prefix is detected from any 2-letter path segment at the
+start of `window.location.pathname`. Same fallback chain for
+`getApiUrl()` (CONFIG.apiUrl → CONFIG.apiBase → deduction).
+
+The boot still records whether the URL came from CONFIG or
+deduction, so operators can see at a glance which path was taken.
+
+### Structural — iframe load verification
+
+In alpha3, if `frame.php` returned a 500 or HTML error page, the
+iframe loaded "successfully" (no error event) but contained the
+wrong document. The audio player was just invisible.
+
+**alpha4 attaches a `load` event listener on the iframe** that
+inspects `iframe.contentDocument` (same-origin → accessible) and
+checks for `#orp-player`. If the marker is absent, a 200-character
+excerpt of the body text is captured into the diagnostic step
+detail (visible in the red overlay) so the operator can recognize
+a PHP error page, redirect, etc., without F12. An `error` event
+listener catches the network-level failure case.
+
+### Files changed
+
+- `controllers/front/frame.php` — rewritten without Smarty
+- `views/js/bridge.js` — diagnostic system, `deduceFrameUrl`,
+  `getApiUrl` fallback, `load`-event verification, `init()` wraps
+  every phase in `recordStep`
+- `views/templates/front/frame.tpl` — deleted (no longer used)
+- `config.xml` — version 3.0.0-alpha4
+- `onlyrootsplayer.php` — version 3.0.0-alpha4
+
+### Migration
+
+No DB schema change. No PS hook change. Drop-in: clear PS cache
+after upload so the new `frame.php` controller is registered in
+the dispatcher.
+
 ## [3.0.0-alpha3] — 2026-05-02
 
 Honest correction of v3.0.0-alpha2 — the alpha2 changelog claimed

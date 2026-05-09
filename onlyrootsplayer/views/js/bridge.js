@@ -1,41 +1,137 @@
 /**
  * OnlyRoots Persistent Audio Player — parent-side messenger
  *
- * Runs in the PARENT page (every front URL of the shop). The audio
- * engine itself lives inside the persistent iframe loaded via
- * frame-injector.tpl. This script's job:
+ * v3.0.0-alpha4 design principles:
+ *   - **Self-diagnostic at boot** : every step logs its result; if
+ *     anything fails, a visible red overlay appears at the top of the
+ *     page (debug mode only) with the exact reason.
+ *   - **Resilient to missing config** : if `window.onlyrootsPlayerConfig`
+ *     is absent (Media::addJsDef didn't run, the global got overwritten,
+ *     etc.), the iframe URL is *deduced* from `window.location` using
+ *     the standard PrestaShop module-link pattern.
+ *   - **Verifiable iframe load** : after the iframe is appended, we
+ *     listen for the `load` event and inspect `contentDocument` for
+ *     the expected player markup. If the iframe loaded but the
+ *     content is invalid (e.g. frame.php returned 500 with an HTML
+ *     error page), the debug overlay surfaces it.
  *
- *   1. Find product cards on listing pages and check which ones have
- *      audio (batched API call). Inject a small play button on each.
- *   2. On product card play click: fetch the full playlist for that
- *      product, then postMessage("load") to the iframe to start it.
- *   3. Listen to iframe messages and update parent UI state (which
- *      product is currently playing, "playing" highlight on cards).
- *   4. iOS user-gesture warm-up: on first user click anywhere in the
- *      parent, postMessage("warmup-audio") to the iframe so its
- *      AudioContext gets unlocked. Subsequent programmatic
- *      audio.play() calls will then succeed even though the gesture
- *      came from the parent frame.
- *
- * Visual integration: the iframe is positioned `fixed bottom: 0`
- * across the full width with a fixed height (~72px). It overlays the
- * page content like the v2.5.x player did, but is now in its own
- * document so it can never be touched by the theme or other modules.
+ * Responsibilities:
+ *   1. Inject the persistent iframe at boot
+ *   2. Find product cards on listings and inject mini play buttons
+ *   3. On card play click: fetch playlist, postMessage to iframe
+ *   4. Listen to iframe messages to keep mini-button visuals in sync
+ *   5. Handle integrated product-page playlist clicks (Papp mode)
+ *   6. iOS user-gesture warm-up
  *
  * @author    PixFeed - Marc Gueffie
  * @copyright 2026 PixFeed
- * @version   3.0.0
+ * @version   3.0.0-alpha4
  */
 (function () {
     'use strict';
 
-    if (typeof onlyrootsPlayerConfig === 'undefined') return;
-    var CONFIG = window.onlyrootsPlayerConfig;
+    /* ============================================================ *
+     *  CONFIG RESOLUTION (resilient to missing globals)            *
+     * ============================================================ */
+
+    var CONFIG = (typeof window.onlyrootsPlayerConfig === 'object' && window.onlyrootsPlayerConfig)
+        ? window.onlyrootsPlayerConfig
+        : {};
     var DEBUG  = !!CONFIG.debug;
+
+    /* ============================================================ *
+     *  SELF-DIAGNOSTIC — visible debug overlay                     *
+     *                                                              *
+     * In debug mode (BO toggle), if any boot step fails we paint a *
+     * red banner at the top of the page with the exact reason.    *
+     * Operators don't need F12 to know what broke.                *
+     * ============================================================ */
+
+    var diagnosticSteps = [];
 
     function dlog() {
         if (!DEBUG || !window.console) return;
         try { window.console.log.apply(window.console, ['[ORP/bridge]'].concat([].slice.call(arguments))); } catch (e) {}
+    }
+
+    function recordStep(label, ok, detail) {
+        diagnosticSteps.push({ label: label, ok: !!ok, detail: detail || '' });
+        dlog((ok ? '✓' : '✗') + ' ' + label + (detail ? ' — ' + detail : ''));
+    }
+
+    function showDebugOverlay(failedSteps) {
+        if (!DEBUG) return;
+        try {
+            // Don't add overlay twice.
+            if (document.getElementById('orp-debug-overlay')) return;
+            var overlay = document.createElement('div');
+            overlay.id = 'orp-debug-overlay';
+            overlay.setAttribute('style', [
+                'position:fixed', 'top:0', 'left:0', 'right:0',
+                'background:#dc2626', 'color:#fff',
+                'font:12px/1.4 monospace', 'padding:8px 12px',
+                'z-index:99999', 'border-bottom:2px solid #991b1b',
+                'box-shadow:0 2px 4px rgba(0,0,0,0.3)',
+            ].join(';'));
+            var lines = ['[OnlyRoots Player] boot failed:'].concat(
+                failedSteps.map(function (s) { return '  ✗ ' + s.label + (s.detail ? ' — ' + s.detail : ''); })
+            );
+            overlay.textContent = lines.join('\n');
+            overlay.style.whiteSpace = 'pre';
+            // Add a close button so the overlay isn't permanent if the
+            // operator wants to test the page.
+            var closeBtn = document.createElement('span');
+            closeBtn.textContent = ' [×]';
+            closeBtn.style.cursor = 'pointer';
+            closeBtn.style.float = 'right';
+            closeBtn.addEventListener('click', function () { overlay.remove(); });
+            overlay.appendChild(closeBtn);
+            (document.body || document.documentElement).appendChild(overlay);
+        } catch (e) { /* even our overlay can fail; nothing to do */ }
+    }
+
+    /* ============================================================ *
+     *  FRAME URL DEDUCTION (resilient fallback)                    *
+     *                                                              *
+     * If CONFIG.frameUrl is missing for any reason (the parent     *
+     * `Media::addJsDef` didn't run, a 3rd-party module overwrote   *
+     * `window.onlyrootsPlayerConfig`, etc.), deduce the URL from   *
+     * `window.location` using PrestaShop's standard module-link    *
+     * URL pattern: `<origin>[/<lang>]/module/<name>/<action>`.     *
+     *                                                              *
+     * The lang prefix is detected from the current path: any path  *
+     * starting with `/<2-letter>/` is treated as language-prefixed *
+     * (PS friendly URLs with `Multi-shop` enabled).                *
+     * ============================================================ */
+
+    function deduceFrameUrl() {
+        if (CONFIG.frameUrl && typeof CONFIG.frameUrl === 'string') {
+            return CONFIG.frameUrl;
+        }
+        try {
+            var origin = window.location.origin;
+            var path   = window.location.pathname;
+            var langMatch = path.match(/^\/([a-z]{2})\//i);
+            var prefix = langMatch ? '/' + langMatch[1] : '';
+            return origin + prefix + '/module/onlyrootsplayer/frame';
+        } catch (e) {
+            return '/module/onlyrootsplayer/frame';
+        }
+    }
+
+    function getApiUrl() {
+        // Same fallback strategy: try CONFIG, fall back to deduction.
+        if (CONFIG.apiUrl && typeof CONFIG.apiUrl === 'string') return CONFIG.apiUrl;
+        if (CONFIG.apiBase && typeof CONFIG.apiBase === 'string') return CONFIG.apiBase;
+        try {
+            var origin = window.location.origin;
+            var path   = window.location.pathname;
+            var langMatch = path.match(/^\/([a-z]{2})\//i);
+            var prefix = langMatch ? '/' + langMatch[1] : '';
+            return origin + prefix + '/module/onlyrootsplayer/playlist';
+        } catch (e) {
+            return '/module/onlyrootsplayer/playlist';
+        }
     }
 
     /* ============================================================ *
@@ -74,15 +170,21 @@
     }
 
     function ensureIframeInjected() {
-        if (findIframe()) return iframeEl;
-        if (!CONFIG.frameUrl) {
-            dlog('CONFIG.frameUrl missing, cannot inject iframe');
+        if (findIframe()) {
+            recordStep('iframe-already-present', true, iframeEl.src);
+            return iframeEl;
+        }
+        var frameUrl = deduceFrameUrl();
+        if (!frameUrl) {
+            recordStep('iframe-url-resolved', false, 'no CONFIG.frameUrl and deduction returned empty');
             return null;
         }
+        recordStep('iframe-url-resolved', true,
+            (CONFIG.frameUrl ? 'from CONFIG' : 'deduced from location') + ' = ' + frameUrl);
         try {
             iframeEl = document.createElement('iframe');
             iframeEl.id = 'orp-frame';
-            iframeEl.src = CONFIG.frameUrl;
+            iframeEl.src = frameUrl;
             iframeEl.title = 'Audio player';
             iframeEl.scrolling = 'no';
             iframeEl.setAttribute('allow', 'autoplay; encrypted-media');
@@ -92,10 +194,46 @@
             iframeEl.setAttribute('data-swup-persist', 'orp-frame');
             // Don't let the iframe steal Tab focus by default.
             iframeEl.setAttribute('tabindex', '-1');
+
+            // Verify the iframe document actually contains the player
+            // markup once it loads. If frame.php returns 500 or an
+            // unrelated document (3rd-party hijack, redirect, etc.),
+            // surface that visibly instead of failing silently.
+            iframeEl.addEventListener('load', function () {
+                try {
+                    // Same-origin: contentDocument is accessible.
+                    var doc = iframeEl.contentDocument;
+                    if (!doc) {
+                        recordStep('iframe-load-verify', false, 'contentDocument null (cross-origin or detached)');
+                        showDebugOverlay(diagnosticSteps.filter(function (s) { return !s.ok; }));
+                        return;
+                    }
+                    var marker = doc.getElementById('orp-player');
+                    if (!marker) {
+                        // Capture a 200-char excerpt to help diagnose
+                        // (PHP error page, redirect, etc.).
+                        var bodyText = (doc.body && doc.body.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+                        recordStep('iframe-load-verify', false,
+                            '#orp-player not found in iframe; body excerpt = "' + bodyText + '"');
+                        showDebugOverlay(diagnosticSteps.filter(function (s) { return !s.ok; }));
+                        return;
+                    }
+                    recordStep('iframe-load-verify', true, '#orp-player present');
+                } catch (e) {
+                    recordStep('iframe-load-verify', false, 'inspection threw: ' + (e && e.message || e));
+                    showDebugOverlay(diagnosticSteps.filter(function (s) { return !s.ok; }));
+                }
+            }, false);
+
+            iframeEl.addEventListener('error', function () {
+                recordStep('iframe-load-verify', false, 'iframe error event fired');
+                showDebugOverlay(diagnosticSteps.filter(function (s) { return !s.ok; }));
+            }, false);
+
             document.body.appendChild(iframeEl);
-            dlog('iframe injected', CONFIG.frameUrl);
+            recordStep('iframe-injected', true, frameUrl);
         } catch (e) {
-            dlog('iframe injection error', e);
+            recordStep('iframe-injected', false, (e && e.message) || String(e));
         }
         return iframeEl;
     }
@@ -250,13 +388,6 @@
         if (!raw) return null;
         var n = parseInt(raw, 10);
         return isNaN(n) ? null : n;
-    }
-
-    function getApiUrl() {
-        // hookDisplayHeader exposes the playlist endpoint URL as
-        // `apiUrl` on `onlyrootsPlayerConfig` (legacy v2.5.x name kept
-        // for compat). bridge.js consumes it under the same key.
-        return CONFIG.apiUrl || CONFIG.apiBase || '';
     }
 
     function fetchAudioProductIds(ids) {
@@ -548,31 +679,52 @@
      *  INIT                                                        *
      * ============================================================ */
 
+    function safeStep(label, fn) {
+        try {
+            var result = fn();
+            recordStep(label, true, typeof result === 'string' ? result : '');
+            return result;
+        } catch (e) {
+            recordStep(label, false, (e && e.message) || String(e));
+            return null;
+        }
+    }
+
     function init() {
+        recordStep('config-present', !!window.onlyrootsPlayerConfig,
+            window.onlyrootsPlayerConfig ? 'CONFIG keys=' + Object.keys(CONFIG).join(',') : 'window.onlyrootsPlayerConfig missing');
+
         // Inject the iframe ourselves (no PS hook dependency).
         ensureIframeInjected();
         if (!iframeEl) {
-            dlog('iframe could not be created, abort');
+            recordStep('iframe-ready', false, 'iframeEl null after ensureIframeInjected');
+            showDebugOverlay(diagnosticSteps.filter(function (s) { return !s.ok; }));
             return;
         }
 
-        window.addEventListener('message', onIframeMessage, false);
-        bindIOSWarmup();
-        bindIntegratedPlaylistDelegate();
-        bindReinjectionTriggers();
-        injectButtonsIntoCards(findProductCards());
+        safeStep('message-listener-bound', function () {
+            window.addEventListener('message', onIframeMessage, false);
+        });
+        safeStep('ios-warmup-bound', function () { bindIOSWarmup(); });
+        safeStep('integrated-playlist-delegate-bound', function () { bindIntegratedPlaylistDelegate(); });
+        safeStep('reinjection-triggers-bound', function () { bindReinjectionTriggers(); });
+        safeStep('initial-card-buttons-injected', function () {
+            var cards = findProductCards();
+            injectButtonsIntoCards(cards);
+            return cards.length + ' card(s) scanned';
+        });
         // Sync icons in case the integrated playlist is already on the
         // page at boot AND the iframe will restore state from
         // localStorage. The 'state' message handler will re-sync once
         // the iframe responds.
-        syncIntegratedPlaylistIcons();
+        safeStep('integrated-icons-synced', function () { syncIntegratedPlaylistIcons(); });
 
-        // The iframe sends a 'ready' message via load event — until
-        // then, postToIframe queues commands. We don't need to
-        // explicitly request-state here because the iframe will send
-        // its own 'state' (with restored data) right after 'ready'.
-
-        dlog('bridge initialised, frameUrl=', CONFIG.frameUrl, 'apiUrl=', getApiUrl());
+        var failed = diagnosticSteps.filter(function (s) { return !s.ok; });
+        if (failed.length > 0) {
+            showDebugOverlay(failed);
+        } else {
+            dlog('bridge initialised cleanly, frameUrl=', deduceFrameUrl(), 'apiUrl=', getApiUrl());
+        }
     }
 
     if (document.readyState === 'loading') {
