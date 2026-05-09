@@ -59,8 +59,16 @@
         dlog((ok ? '✓' : '✗') + ' ' + label + (detail ? ' — ' + detail : ''));
     }
 
-    function showDebugOverlay(failedSteps) {
-        if (!DEBUG) return;
+    /**
+     * @param {Array} failedSteps  steps from `diagnosticSteps` to display
+     * @param {Object} [opts]
+     * @param {boolean} [opts.force=false]  when true, ignore the DEBUG flag.
+     *        Use for *infrastructure* failures (iframe didn't load, frame.php
+     *        500, etc.) — the operator must see those even with debug off.
+     */
+    function showDebugOverlay(failedSteps, opts) {
+        var force = !!(opts && opts.force);
+        if (!DEBUG && !force) return;
         try {
             // Don't add overlay twice.
             if (document.getElementById('orp-debug-overlay')) return;
@@ -199,13 +207,30 @@
             // markup once it loads. If frame.php returns 500 or an
             // unrelated document (3rd-party hijack, redirect, etc.),
             // surface that visibly instead of failing silently.
+            //
+            // The overlay is forced (DEBUG-independent) on infra failure
+            // because "the player just doesn't appear" is a critical
+            // user-facing breakage that the operator must see regardless
+            // of whether they remembered to flip the BO debug toggle.
             iframeEl.addEventListener('load', function () {
                 try {
                     // Same-origin: contentDocument is accessible.
                     var doc = iframeEl.contentDocument;
                     if (!doc) {
                         recordStep('iframe-load-verify', false, 'contentDocument null (cross-origin or detached)');
-                        showDebugOverlay(diagnosticSteps.filter(function (s) { return !s.ok; }));
+                        showDebugOverlay(diagnosticSteps.filter(function (s) { return !s.ok; }), { force: true });
+                        return;
+                    }
+                    // Self-reported error from frame.php's catch block?
+                    // Surface its message + location directly.
+                    var errMarker = doc.getElementById('orp-error');
+                    if (errMarker) {
+                        var errMsg   = errMarker.getAttribute('data-error') || '(no message)';
+                        var errWhere = errMarker.getAttribute('data-where') || '';
+                        recordStep('iframe-load-verify', false,
+                            'frame.php reported error: ' + errMsg
+                            + (errWhere ? ' (' + errWhere + ')' : ''));
+                        showDebugOverlay(diagnosticSteps.filter(function (s) { return !s.ok; }), { force: true });
                         return;
                     }
                     var marker = doc.getElementById('orp-player');
@@ -215,19 +240,19 @@
                         var bodyText = (doc.body && doc.body.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 200);
                         recordStep('iframe-load-verify', false,
                             '#orp-player not found in iframe; body excerpt = "' + bodyText + '"');
-                        showDebugOverlay(diagnosticSteps.filter(function (s) { return !s.ok; }));
+                        showDebugOverlay(diagnosticSteps.filter(function (s) { return !s.ok; }), { force: true });
                         return;
                     }
                     recordStep('iframe-load-verify', true, '#orp-player present');
                 } catch (e) {
                     recordStep('iframe-load-verify', false, 'inspection threw: ' + (e && e.message || e));
-                    showDebugOverlay(diagnosticSteps.filter(function (s) { return !s.ok; }));
+                    showDebugOverlay(diagnosticSteps.filter(function (s) { return !s.ok; }), { force: true });
                 }
             }, false);
 
             iframeEl.addEventListener('error', function () {
                 recordStep('iframe-load-verify', false, 'iframe error event fired');
-                showDebugOverlay(diagnosticSteps.filter(function (s) { return !s.ok; }));
+                showDebugOverlay(diagnosticSteps.filter(function (s) { return !s.ok; }), { force: true });
             }, false);
 
             document.body.appendChild(iframeEl);

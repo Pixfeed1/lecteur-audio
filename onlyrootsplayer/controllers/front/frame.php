@@ -33,10 +33,74 @@ class OnlyrootsplayerFrameModuleFrontController extends ModuleFrontController
     public $ssl  = true;
     public $auth = false;
 
+    /**
+     * Override init() to wrap parent::init() in a try/catch. If
+     * PrestaShop's init phase throws (smarty setup, csrf, maintenance
+     * check, etc.), we still emit a detectable error page rather than
+     * letting the framework return an empty 500.
+     */
+    public function init()
+    {
+        // Shutdown handler catches truly fatal errors (memory exhaustion,
+        // strict timeouts, parse errors in autoloaded files) that escape
+        // try/catch. Without this, frame.php can still return an empty
+        // 500 — exactly the symptom we're trying to eliminate.
+        register_shutdown_function([$this, 'handleShutdown']);
+
+        try {
+            parent::init();
+        } catch (Throwable $e) {
+            $this->renderError($e);
+            exit;
+        }
+    }
+
+    public function handleShutdown()
+    {
+        $err = error_get_last();
+        if (!$err) return;
+        if (!in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) {
+            return;
+        }
+        // If we already produced a body, don't overwrite it.
+        if (headers_sent()) return;
+        $msg   = $err['message'] . ' (type=' . $err['type'] . ')';
+        $where = ($err['file'] ?? '?') . ':' . ($err['line'] ?? '?');
+        @error_log('[onlyrootsplayer/frame] FATAL ' . $msg . ' at ' . $where);
+
+        header('HTTP/1.1 500 Internal Server Error', true, 500);
+        header('X-Frame-Options: SAMEORIGIN');
+        header('Content-Type: text/html; charset=utf-8');
+        header('Cache-Control: no-store');
+
+        $errAttr   = htmlspecialchars('FATAL: ' . $msg, ENT_QUOTES, 'UTF-8');
+        $whereAttr = htmlspecialchars($where, ENT_QUOTES, 'UTF-8');
+        $errText   = htmlspecialchars($msg, ENT_QUOTES, 'UTF-8');
+        $whereText = htmlspecialchars($where, ENT_QUOTES, 'UTF-8');
+        echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Fatal</title></head><body>'
+           . '<div id="orp-error" data-error="' . $errAttr . '" data-where="' . $whereAttr . '">'
+           . '<strong>FATAL</strong> ' . $errText . '<br><small>' . $whereText . '</small></div>'
+           . '</body></html>';
+    }
+
     public function initContent()
     {
         // Don't call parent::initContent() — we render our own HTML.
 
+        // Top-level try/catch so any failure inside the build step
+        // produces a *detectable error page* instead of a generic 500
+        // with no body. bridge.js inspects the iframe document for
+        // `#orp-error` and surfaces the message in its debug overlay.
+        try {
+            $this->renderPlayer();
+        } catch (Throwable $e) {
+            $this->renderError($e);
+        }
+        exit;
+    }
+
+    private function renderPlayer()
+    {
         if (!headers_sent()) {
             header('X-Frame-Options: SAMEORIGIN');
             header('X-Content-Type-Options: nosniff');
@@ -203,6 +267,57 @@ class OnlyrootsplayerFrameModuleFrontController extends ModuleFrontController
 </body>
 </html>
 HTML;
-        exit;
+    }
+
+    /**
+     * Emits a detectable error page when renderPlayer() throws. The
+     * page contains `<div id="orp-error" data-error="...">` (instead
+     * of `#orp-player`) so bridge.js's iframe-load-verify step can
+     * recognise it and surface the message to the operator via the
+     * red debug overlay — no F12, no server log access needed.
+     *
+     * Always returns HTTP 500 to keep the failure visible in the
+     * Network tab, but with a real HTML body so the iframe can be
+     * inspected from the parent frame.
+     */
+    private function renderError(Throwable $e)
+    {
+        $msg   = $e->getMessage();
+        $where = $e->getFile() . ':' . $e->getLine();
+        $class = get_class($e);
+
+        @error_log('[onlyrootsplayer/frame] ' . $class . ': ' . $msg . ' at ' . $where);
+
+        if (!headers_sent()) {
+            // 500 + real HTML body so the iframe load event fires.
+            header('HTTP/1.1 500 Internal Server Error', true, 500);
+            header('X-Frame-Options: SAMEORIGIN');
+            header('Content-Type: text/html; charset=utf-8');
+            header('Cache-Control: no-store');
+        }
+
+        $errAttr   = htmlspecialchars($class . ': ' . $msg, ENT_QUOTES, 'UTF-8');
+        $whereAttr = htmlspecialchars($where, ENT_QUOTES, 'UTF-8');
+        $errText   = htmlspecialchars($msg, ENT_QUOTES, 'UTF-8');
+        $whereText = htmlspecialchars($where, ENT_QUOTES, 'UTF-8');
+
+        echo <<<HTML
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="robots" content="noindex, nofollow">
+    <title>OnlyRoots Player — error</title>
+    <style>body{font:13px/1.4 monospace;margin:0;padding:8px;background:#fee;color:#900;}</style>
+</head>
+<body>
+    <div id="orp-error" data-error="{$errAttr}" data-where="{$whereAttr}">
+        <strong>OnlyRoots Player frame error</strong><br>
+        {$errText}<br>
+        <small>{$whereText}</small>
+    </div>
+</body>
+</html>
+HTML;
     }
 }

@@ -3,6 +3,58 @@
 All notable changes to OnlyRoots Persistent Audio Player are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0-alpha5] — 2026-05-09
+
+Follow-up to alpha4. Operator test surfaced a `frame.php` 500 with
+an **empty body** — typical when PHP `display_errors=off` (production
+default) and a fatal escapes any user-level handling. The alpha4
+self-diagnostic *worked correctly* (the red overlay did appear with
+"#orp-player not found in iframe; body excerpt = ''"), but the empty
+body left the actual cause invisible.
+
+### Structural — frame.php now self-reports any failure
+
+Three layers of defense, each producing a *detectable error page*
+(with `<div id="orp-error" data-error="...">`) instead of an empty
+500. bridge.js reads `data-error` and surfaces it in the red
+overlay so the operator sees the exact PHP error message + file/line
+without server-log access.
+
+1. **`init()` override with try/catch** around `parent::init()`. If
+   PrestaShop's init phase (smarty setup, csrf, maintenance check,
+   etc.) throws, we render the error page and exit cleanly.
+2. **`initContent()` already had try/catch** around the player
+   render — kept and pointed to the same `renderError(Throwable)`
+   helper.
+3. **`register_shutdown_function`** as a last resort. Catches truly
+   fatal errors that escape `Throwable` (memory exhaustion, parse
+   errors in autoloaded files, strict timeouts). `error_get_last()`
+   is inspected; if it's a fatal, we render an `<div id="orp-error">`
+   page with the message before PHP terminates.
+
+All three paths also write the error to PHP's `error_log` so it
+shows up in standard hosting logs.
+
+### Structural — bridge.js detects `#orp-error` explicitly
+
+The alpha4 verifier checked for `#orp-player` and surfaced a 200-char
+body excerpt on miss. alpha5 adds a dedicated check for
+`#orp-error` first; when present, it pulls `data-error` and
+`data-where` and surfaces them as a clean labelled diagnostic step
+("frame.php reported error: <class>: <msg> (<file>:<line>)").
+
+### Structural — overlay always shows on infrastructure failure
+
+In alpha4, the overlay was gated by the BO debug toggle. For
+*infrastructure* failures (iframe didn't load, frame.php returned
+non-player content, etc.), the operator must see the breakage
+regardless of whether they remembered to flip the debug flag.
+
+`showDebugOverlay(failed, { force: true })` is now called for all
+iframe verification failures. Per-step verbose console logging
+remains DEBUG-gated (developer concern); the visible overlay for
+broken-player infra is universal (operator concern).
+
 ## [3.0.0-alpha4] — 2026-05-09
 
 Structural reliability pass — not band-aids. The alpha3 install was
